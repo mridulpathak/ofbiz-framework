@@ -30,12 +30,12 @@ import org.apache.ofbiz.entity.model.ModelEntity;
 
 public class OrderByItem implements Comparator<GenericEntity> {
     public static final int DEFAULT = 0;
-    public static final int UPPER   = 1;
-    public static final int LOWER   = 2;
+    public static final int UPPER = 1;
+    public static final int LOWER = 2;
 
     public static final String NULLS_FIRST = "NULLS FIRST";
     public static final String NULLS_LAST = "NULLS LAST";
-    public static final String MODULE = OrderByItem.class.getName();
+    private static final String MODULE = OrderByItem.class.getName();
 
     protected boolean descending;
     protected Boolean nullsFirst;
@@ -137,14 +137,14 @@ public class OrderByItem implements Comparator<GenericEntity> {
         }
         EntityConditionValue value = EntityFieldValue.makeFieldValue(text);
         switch (caseSensitivity) {
-            case UPPER:
-                value = EntityFunction.UPPER(value);
-                break;
-            case LOWER:
-                value = EntityFunction.LOWER(value);
-                break;
-            default:
-                break;
+        case UPPER:
+            value = EntityFunction.UPPER(value);
+            break;
+        case LOWER:
+            value = EntityFunction.LOWER(value);
+            break;
+        default:
+            break;
         }
         return new OrderByItem(value, descending, nullsFirst);
     }

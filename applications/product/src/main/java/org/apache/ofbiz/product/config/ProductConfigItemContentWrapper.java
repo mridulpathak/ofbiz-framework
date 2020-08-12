@@ -52,7 +52,7 @@ import org.apache.ofbiz.service.ServiceContainer;
  */
 public class ProductConfigItemContentWrapper implements ContentWrapper {
 
-    public static final String MODULE = ProductConfigItemContentWrapper.class.getName();
+    private static final String MODULE = ProductConfigItemContentWrapper.class.getName();
     public static final String SEPARATOR = "::";    // cache key separator
     private static final UtilCache<String, String> configItemContentCache = UtilCache.createUtilCache("configItem.content", true); // use soft reference to free up memory if needed
 
@@ -132,7 +132,7 @@ public class ProductConfigItemContentWrapper implements ContentWrapper {
             String outString = outWriter.toString();
             if (UtilValidate.isEmpty(outString)) {
                 outString = productConfigItem.getModelEntity().isField(candidateFieldName) ? productConfigItem.getString(candidateFieldName): "";
-                outString = outString == null? "" : outString;
+                outString = outString == null ? "" : outString;
             }
             outString = encoder.sanitize(outString, null);
             configItemContentCache.put(cacheKey, outString);
@@ -140,7 +140,7 @@ public class ProductConfigItemContentWrapper implements ContentWrapper {
         } catch (GeneralException | IOException e) {
             Debug.logError(e, "Error rendering ProdConfItemContent, inserting empty String", MODULE);
             String candidateOut = productConfigItem.getModelEntity().isField(candidateFieldName) ? productConfigItem.getString(candidateFieldName): "";
-            return candidateOut == null? "" : encoder.sanitize(candidateOut, null);
+            return candidateOut == null ? "" : encoder.sanitize(candidateOut, null);
         }
     }
 

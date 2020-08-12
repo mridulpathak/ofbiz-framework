@@ -56,7 +56,7 @@ import org.apache.ofbiz.entity.util.EntityQuery;
 @SuppressWarnings("serial")
 public class OrderListState implements Serializable {
 
-    public static final String MODULE = OrderListState.class.getName();
+    private static final String MODULE = OrderListState.class.getName();
     public static final String SESSION_KEY = "__ORDER_LIST_STATUS__";
     public static final String VIEW_SIZE_PARAM = "viewSize";
     public static final String VIEW_INDEX_PARAM = "viewIndex";
@@ -254,7 +254,7 @@ public class OrderListState implements Serializable {
             typeConditions.add(EntityCondition.makeCondition("orderTypeId", EntityOperator.EQUALS, parameterToOrderTypeId.get(type)));
         }
 
-        EntityCondition statusConditionsList = EntityCondition.makeCondition(statusConditions,  EntityOperator.OR);
+        EntityCondition statusConditionsList = EntityCondition.makeCondition(statusConditions, EntityOperator.OR);
         EntityCondition typeConditionsList = EntityCondition.makeCondition(typeConditions, EntityOperator.OR);
         if (statusConditions.size() > 0) {
             allConditions.add(statusConditionsList);

@@ -39,7 +39,7 @@ import org.xml.sax.SAXException;
 @SuppressWarnings("serial")
 public class ComponentResourceHandler implements ResourceHandler {
 
-    public static final String MODULE = ComponentResourceHandler.class.getName();
+    private static final String MODULE = ComponentResourceHandler.class.getName();
     protected String componentName;
     protected String loaderName;
     protected String location;
@@ -103,9 +103,9 @@ public class ComponentResourceHandler implements ResourceHandler {
         if (obj instanceof ComponentResourceHandler) {
             ComponentResourceHandler other = (ComponentResourceHandler) obj;
 
-            if (this.loaderName.equals(other.loaderName) &&
-                this.componentName.equals(other.componentName) &&
-                this.location.equals(other.location)) {
+            if (this.loaderName.equals(other.loaderName)
+                    && this.componentName.equals(other.componentName)
+                    && this.location.equals(other.location)) {
                 return true;
             }
         }

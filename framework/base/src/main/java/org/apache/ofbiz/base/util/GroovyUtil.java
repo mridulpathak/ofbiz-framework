@@ -41,13 +41,14 @@ import groovy.lang.Script;
  * Groovy Utilities.
  *
  */
-public class GroovyUtil {
+public final class GroovyUtil {
 
-    public static final String MODULE = GroovyUtil.class.getName();
+    private static final String MODULE = GroovyUtil.class.getName();
+    private static final UtilCache<String, Class<?>> PARSED_SCRIPTS = UtilCache.createUtilCache("script.GroovyLocationParsedCache", 0, 0, false);
+    private static final GroovyClassLoader GROOVY_CLASS_LOADER;
 
-    private static final UtilCache<String, Class<?>> parsedScripts = UtilCache.createUtilCache("script.GroovyLocationParsedCache", 0, 0, false);
+    private GroovyUtil() { }
 
-    private static final GroovyClassLoader groovyScriptClassLoader;
     static {
         GroovyClassLoader groovyClassLoader = null;
         String scriptBaseClass = UtilProperties.getPropertyValue("groovy", "scriptBaseClass");
@@ -56,7 +57,7 @@ public class GroovyUtil {
             conf.setScriptBaseClass(scriptBaseClass);
             groovyClassLoader = new GroovyClassLoader(GroovyUtil.class.getClassLoader(), conf);
         }
-        groovyScriptClassLoader = groovyClassLoader;
+        GROOVY_CLASS_LOADER = groovyClassLoader;
     }
 
     /**
@@ -114,9 +115,9 @@ public class GroovyUtil {
             vars.putAll(context);
             if (UtilValidate.isNotEmpty(expression)) {
                 //analyse expression to find variables by split non alpha, ignoring "_" to allow my_variable usage
-                String [] variables = expression.split("[\\P{Alpha}&&[^_]]+");
+                String[] variables = expression.split("[\\P{Alpha}&&[^_]]+");
                 for (String variable: variables) {
-                    if(!vars.containsKey(variable)) {
+                    if (!vars.containsKey(variable)) {
                         vars.put(variable, null);
                     }
                 }
@@ -124,7 +125,7 @@ public class GroovyUtil {
             vars.put("context", context);
             if (vars.get(ScriptUtil.SCRIPT_HELPER_KEY) == null) {
                 ScriptContext scriptContext = ScriptUtil.createScriptContext(context);
-                ScriptHelper scriptHelper = (ScriptHelper)scriptContext.getAttribute(ScriptUtil.SCRIPT_HELPER_KEY);
+                ScriptHelper scriptHelper = (ScriptHelper) scriptContext.getAttribute(ScriptUtil.SCRIPT_HELPER_KEY);
                 if (scriptHelper != null) {
                     vars.put(ScriptUtil.SCRIPT_HELPER_KEY, scriptHelper);
                 }
@@ -139,20 +140,21 @@ public class GroovyUtil {
 
     public static Class<?> getScriptClassFromLocation(String location) throws GeneralException {
         try {
-            Class<?> scriptClass = parsedScripts.get(location);
+            Class<?> scriptClass = PARSED_SCRIPTS.get(location);
             if (scriptClass == null) {
                 URL scriptUrl = FlexibleLocation.resolveLocation(location);
                 if (scriptUrl == null) {
                     throw new GeneralException("Script not found at location [" + location + "]");
                 }
                 scriptClass = parseClass(scriptUrl.openStream(), location);
-                Class<?> scriptClassCached = parsedScripts.putIfAbsent(location, scriptClass);
+                Class<?> scriptClassCached = PARSED_SCRIPTS.putIfAbsent(location, scriptClass);
                 if (scriptClassCached == null) { // putIfAbsent returns null if the class is added to the cache
                     if (Debug.verboseOn()) {
                         Debug.logVerbose("Cached Groovy script at: " + location, MODULE);
                     }
                 } else {
-                    // the newly parsed script is discarded and the one found in the cache (that has been created by a concurrent thread in the meantime) is used
+                    // the newly parsed script is discarded and the one found in the cache (that has been created by a concurrent thread in the
+                    // meantime) is used
                     scriptClass = scriptClassCached;
                 }
             }
@@ -177,8 +179,8 @@ public class GroovyUtil {
      */
     private static Class<?> parseClass(InputStream in, String location) throws IOException {
         String classText = UtilIO.readString(in);
-        if (groovyScriptClassLoader != null) {
-            return groovyScriptClassLoader.parseClass(classText, location);
+        if (GROOVY_CLASS_LOADER != null) {
+            return GROOVY_CLASS_LOADER.parseClass(classText, location);
         } else {
             GroovyClassLoader classLoader = new GroovyClassLoader();
             Class<?> klass = classLoader.parseClass(classText, location);
@@ -212,8 +214,6 @@ public class GroovyUtil {
         Script script = InvokerHelper.createScript(getScriptClassFromLocation(location), getBinding(context));
         return UtilValidate.isEmpty(methodName)
                 ? script.run()
-                : script.invokeMethod(methodName, new Object[] { context });
+                : script.invokeMethod(methodName, new Object[] {context });
     }
-
-    private GroovyUtil() {}
 }

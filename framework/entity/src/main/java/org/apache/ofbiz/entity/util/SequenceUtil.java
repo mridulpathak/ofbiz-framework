@@ -41,7 +41,7 @@ import org.apache.ofbiz.entity.transaction.TransactionUtil;
  */
 public class SequenceUtil {
 
-    public static final String MODULE = SequenceUtil.class.getName();
+    private static final String MODULE = SequenceUtil.class.getName();
 
     private final ConcurrentMap<String, SequenceBank> sequences = new ConcurrentHashMap<>();
     private final GenericHelperInfo helperInfo;
@@ -128,7 +128,7 @@ public class SequenceUtil {
         private Long getNextSeqId(long staggerMax) {
             long stagger = 1;
             if (staggerMax > 1) {
-                stagger = (long)Math.ceil(Math.random() * staggerMax);
+                stagger = (long) Math.ceil(Math.random() * staggerMax);
                 if (stagger == 0) stagger = 1;
             }
             synchronized (this) {
@@ -289,7 +289,9 @@ public class SequenceUtil {
             }
 
             maxSeqId = curSeqId + bankSize;
-            if (Debug.infoOn()) Debug.logInfo("Got bank of sequenced IDs for [" + this.seqName + "]; curSeqId=" + curSeqId + ", maxSeqId=" + maxSeqId + ", bankSize=" + bankSize, MODULE);
+            if (Debug.infoOn()) {
+                Debug.logInfo("Got bank of sequenced IDs for [" + this.seqName + "]; curSeqId=" + curSeqId + ", maxSeqId=" + maxSeqId + ", bankSize=" + bankSize, MODULE);
+            }
         }
     }
 }

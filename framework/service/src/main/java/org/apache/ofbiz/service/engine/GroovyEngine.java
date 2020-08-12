@@ -47,7 +47,7 @@ import groovy.lang.Script;
  */
 public final class GroovyEngine extends GenericAsyncEngine {
 
-    public static final String MODULE = GroovyEngine.class.getName();
+    private static final String MODULE = GroovyEngine.class.getName();
     private static final Object[] EMPTY_ARGS = {};
     private static final Set<String> protectedKeys = createProtectedKeys();
 
@@ -95,7 +95,7 @@ public final class GroovyEngine extends GenericAsyncEngine {
         gContext.put("delegator", dispatcher.getDelegator());
         try {
             ScriptContext scriptContext = ScriptUtil.createScriptContext(gContext, protectedKeys);
-            ScriptHelper scriptHelper = (ScriptHelper)scriptContext.getAttribute(ScriptUtil.SCRIPT_HELPER_KEY);
+            ScriptHelper scriptHelper = (ScriptHelper) scriptContext.getAttribute(ScriptUtil.SCRIPT_HELPER_KEY);
             if (scriptHelper != null) {
                 gContext.put(ScriptUtil.SCRIPT_HELPER_KEY, scriptHelper);
             }

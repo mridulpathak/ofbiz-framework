@@ -53,7 +53,7 @@ import org.w3c.dom.Document;
 @SuppressWarnings("serial")
 public class DispatchContext implements Serializable {
 
-    public static final String MODULE = DispatchContext.class.getName();
+    private static final String MODULE = DispatchContext.class.getName();
 
     private static final UtilCache<String, Map<String, ModelService>> modelServiceMapByModel = UtilCache.createUtilCache("service.ModelServiceMapByModel", 0, 0, false);
 
@@ -185,14 +185,14 @@ public class DispatchContext implements Serializable {
             throw new GenericServiceException("Model service is null! Should never happen.");
         }
         switch (modeInt) {
-            case 1:
-                newContext = model.makeValid(context, ModelService.IN_PARAM, true, null);
-                break;
-            case 2:
-                newContext = model.makeValid(context, ModelService.OUT_PARAM, true, null);
-                break;
-            default:
-                throw new GenericServiceException("Invalid mode, should be either IN or OUT");
+        case 1:
+            newContext = model.makeValid(context, ModelService.IN_PARAM, true, null);
+            break;
+        case 2:
+            newContext = model.makeValid(context, ModelService.OUT_PARAM, true, null);
+            break;
+        default:
+            throw new GenericServiceException("Invalid mode, should be either IN or OUT");
         }
         return newContext;
     }

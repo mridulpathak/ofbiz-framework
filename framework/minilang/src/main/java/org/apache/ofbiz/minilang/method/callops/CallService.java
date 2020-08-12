@@ -48,13 +48,12 @@ import org.w3c.dom.Element;
 
 /**
  * Implements the &lt;call-service&gt; element.
- * 
  * @see <a href="https://cwiki.apache.org/confluence/display/OFBIZ/Mini+Language+-+minilang+-+simple-method+-+Reference">Mini-language Reference</a>
  */
 public final class CallService extends MethodOperation {
 
     private static final String MODULE = CallService.class.getName();
-    public static final String RESOURCE = "MiniLangErrorUiLabels";
+    private static final String RESOURCE = "MiniLangErrorUiLabels";
 
     private final boolean breakOnError;
     private final FlexibleMessage defaultMessage;

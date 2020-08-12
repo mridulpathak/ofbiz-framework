@@ -56,7 +56,7 @@ import org.apache.ofbiz.service.LocalDispatcher;
  */
 public class ProductPromoContentWrapper implements ContentWrapper {
 
-    public static final String MODULE = ProductPromoContentWrapper.class.getName();
+    private static final String MODULE = ProductPromoContentWrapper.class.getName();
     public static final String SEPARATOR = "::";    // cache key separator
 
     private static final UtilCache<String, String> productPromoContentCache = UtilCache.createUtilCache("product.promo.content.rendered", true);
@@ -127,7 +127,7 @@ public class ProductPromoContentWrapper implements ContentWrapper {
             String outString = outWriter.toString();
             if (UtilValidate.isEmpty(outString)) {
                 outString = productPromo.getModelEntity().isField(candidateFieldName) ? productPromo.getString(candidateFieldName): "";
-                outString = outString == null? "" : outString;
+                outString = outString == null ? "" : outString;
             }
             outString = encoder.sanitize(outString, null);
             productPromoContentCache.put(cacheKey, outString);
@@ -135,7 +135,7 @@ public class ProductPromoContentWrapper implements ContentWrapper {
         } catch (GeneralException | IOException e) {
             Debug.logError(e, "Error rendering ProductPromoContent, inserting empty String", MODULE);
             String candidateOut = productPromo.getModelEntity().isField(candidateFieldName) ? productPromo.getString(candidateFieldName): "";
-            return candidateOut == null? "" : encoder.sanitize(candidateOut, null);
+            return candidateOut == null ? "" : encoder.sanitize(candidateOut, null);
         }
     }
 

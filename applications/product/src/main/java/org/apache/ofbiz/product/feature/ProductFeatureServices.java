@@ -49,8 +49,8 @@ import org.apache.ofbiz.service.ServiceUtil;
 
 public class ProductFeatureServices {
 
-    public static final String MODULE = ProductFeatureServices.class.getName();
-    public static final String resource = "ProductUiLabels";
+    private static final String MODULE = ProductFeatureServices.class.getName();
+    private static final String RESOURCE = "ProductUiLabels";
 
     /*
      * Parameters: productFeatureCategoryId, productFeatureGroupId, productId, productFeatureApplTypeId
@@ -87,7 +87,7 @@ public class ProductFeatureServices {
         }
 
         if (valueToSearch == null) {
-            return ServiceUtil.returnError(UtilProperties.getMessage(resource, "ProductFeatureByType", locale));
+            return ServiceUtil.returnError(UtilProperties.getMessage(RESOURCE, "ProductFeatureByType", locale));
         }
 
         try {
@@ -216,7 +216,7 @@ public class ProductFeatureServices {
                 // product feature and add it to the id code and product feature applications
                 // of the next variant.  just a matter of whether we're starting with an
                 // existing list of features and id code or from scratch.
-                if (combinations.size()==0) {
+                if (combinations.size() == 0) {
                     for (GenericValue currentFeature: currentFeatures) {
                         if ("SELECTABLE_FEATURE".equals(currentFeature.getString("productFeatureApplTypeId"))) {
                             Map<String, Object> newCombination = new HashMap<>();
@@ -270,7 +270,7 @@ public class ProductFeatureServices {
             for (Map<String, Object> combination: oldCombinations) {
                 // Verify if the default code is already used, if so add a numeric suffix
                 if (defaultVariantProductIds.contains(combination.get("defaultVariantProductId"))) {
-                    combination.put("defaultVariantProductId", combination.get("defaultVariantProductId") + "-" + (defaultCodeCounter < 10? "0" + defaultCodeCounter: "" + defaultCodeCounter));
+                    combination.put("defaultVariantProductId", combination.get("defaultVariantProductId") + "-" + (defaultCodeCounter < 10 ? "0" + defaultCodeCounter : "" + defaultCodeCounter));
                     defaultCodeCounter++;
                 }
                 defaultVariantProductIds.add((String) combination.get("defaultVariantProductId"));
@@ -337,7 +337,7 @@ public class ProductFeatureServices {
             }
 
             if (products.size() == 0) {
-                return ServiceUtil.returnError(UtilProperties.getMessage(resource, "ProductCategoryNoVariants", locale));
+                return ServiceUtil.returnError(UtilProperties.getMessage(RESOURCE, "ProductCategoryNoVariants", locale));
             } else {
                 results = ServiceUtil.returnSuccess();
                 results.put("products", products);

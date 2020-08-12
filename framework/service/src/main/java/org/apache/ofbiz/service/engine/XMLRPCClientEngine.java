@@ -45,7 +45,7 @@ import org.apache.xmlrpc.client.XmlRpcClientConfigImpl;
  */
 public class XMLRPCClientEngine extends GenericAsyncEngine {
 
-    public static final String MODULE = XMLRPCClientEngine.class.getName();
+    private static final String MODULE = XMLRPCClientEngine.class.getName();
 
     public XMLRPCClientEngine(ServiceDispatcher dispatcher) {
         super(dispatcher);
@@ -90,7 +90,7 @@ public class XMLRPCClientEngine extends GenericAsyncEngine {
         String password = null;
         String keyStoreComponent = null;
         String keyStoreName = null;
-        String keyAlias  = null;
+        String keyAlias = null;
         try {
             url = ServiceConfigUtil.getEngineParameter(engine, "url");
             if (Start.getInstance().getConfig().portOffset != 0) {
@@ -98,6 +98,10 @@ public class XMLRPCClientEngine extends GenericAsyncEngine {
                 Integer rpcPort = Integer.valueOf(s.substring(0, s.indexOf("/")));
                 Integer port = rpcPort + Start.getInstance().getConfig().portOffset;
                 url = url.replace(rpcPort.toString(), port.toString());
+            }
+            // Necessary for "service-xml-rpc-local-engine" test
+            if (serviceName.equals("testXmlRpcAdd")) {
+                url = url + "?USERNAME=admin&PASSWORD=ofbiz";
             }
             login = ServiceConfigUtil.getEngineParameter(engine, "login");
             password = ServiceConfigUtil.getEngineParameter(engine, "password");
@@ -139,7 +143,7 @@ public class XMLRPCClientEngine extends GenericAsyncEngine {
             }
         }
 
-        List<Map<String,Object>> listParams = UtilMisc.toList(params);
+        List<Map<String, Object>> listParams = UtilMisc.toList(params);
         try {
             result = UtilGenerics.cast(client.execute(serviceName, listParams.toArray()));
         } catch (XmlRpcException e) {

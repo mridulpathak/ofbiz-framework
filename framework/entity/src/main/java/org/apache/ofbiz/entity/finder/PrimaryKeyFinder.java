@@ -44,7 +44,7 @@ import org.w3c.dom.Element;
  */
 @SuppressWarnings("serial")
 public class PrimaryKeyFinder extends Finder {
-    public static final String MODULE = PrimaryKeyFinder.class.getName();
+    private static final String MODULE = PrimaryKeyFinder.class.getName();
 
     protected FlexibleMapAccessor<Object> valueNameAcsr;
     protected FlexibleStringExpander autoFieldMapExdr;
@@ -87,11 +87,11 @@ public class PrimaryKeyFinder extends Finder {
         GenericValue valueOut = runFind(modelEntity, context, delegator, useCacheBool, autoFieldMapBool, this.fieldMap, this.selectFieldExpanderList);
 
         if (!valueNameAcsr.isEmpty()) {
-           this.valueNameAcsr.put(context, valueOut);
+            this.valueNameAcsr.put(context, valueOut);
         } else {
-           if (valueOut != null) {
-               context.putAll(valueOut);
-           }
+            if (valueOut != null) {
+                context.putAll(valueOut);
+            }
         }
     }
 

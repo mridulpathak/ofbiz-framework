@@ -72,7 +72,7 @@ public abstract class ModelWidgetCondition implements Serializable {
      *
      */
 
-    public static final String MODULE = ModelWidgetCondition.class.getName();
+    private static final String MODULE = ModelWidgetCondition.class.getName();
     public static final ConditionFactory DEFAULT_CONDITION_FACTORY = new DefaultConditionFactory();
 
     private final ModelWidget modelWidget;
@@ -126,7 +126,7 @@ public abstract class ModelWidgetCondition implements Serializable {
         }
     }
 
-    public static interface Condition {
+    public interface Condition {
         boolean eval(Map<String, Object> context);
     }
 
@@ -134,7 +134,7 @@ public abstract class ModelWidgetCondition implements Serializable {
      * A factory for <code>Condition</code> instances.
      *
      */
-    public static interface ConditionFactory {
+    public interface ConditionFactory {
         /**
          * Returns a new <code>Condition</code> instance built from <code>conditionElement</code>.
          *
@@ -147,50 +147,41 @@ public abstract class ModelWidgetCondition implements Serializable {
     }
 
     public static class DefaultConditionFactory implements ConditionFactory {
-        public static final Condition TRUE = new Condition() {
-            @Override
-            public boolean eval(Map<String, Object> context) {
-                return true;
-            }
-        };
-        public static final Condition FALSE = new Condition() {
-            @Override
-            public boolean eval(Map<String, Object> context) {
-                return false;
-            }
-        };
+        public static final Condition TRUE = context -> true;
+        public static final Condition FALSE = context -> false;
 
         @Override
         public Condition newInstance(ModelWidget modelWidget, Element conditionElement) {
             if (conditionElement == null) {
                 return TRUE;
             }
-            if ("and".equals(conditionElement.getNodeName())) {
+            String nodeName = conditionElement.getLocalName();
+            if ("and".equals(nodeName)) {
                 return new And(this, modelWidget, conditionElement);
-            } else if ("xor".equals(conditionElement.getNodeName())) {
+            } else if ("xor".equals(nodeName)) {
                 return new Xor(this, modelWidget, conditionElement);
-            } else if ("or".equals(conditionElement.getNodeName())) {
+            } else if ("or".equals(nodeName)) {
                 return new Or(this, modelWidget, conditionElement);
-            } else if ("not".equals(conditionElement.getNodeName())) {
+            } else if ("not".equals(nodeName)) {
                 return new Not(this, modelWidget, conditionElement);
-            } else if ("if-service-permission".equals(conditionElement.getNodeName())) {
+            } else if ("if-service-permission".equals(nodeName)) {
                 return new IfServicePermission(this, modelWidget, conditionElement);
-            } else if ("if-has-permission".equals(conditionElement.getNodeName())) {
+            } else if ("if-has-permission".equals(nodeName)) {
                 return new IfHasPermission(this, modelWidget, conditionElement);
-            } else if ("if-validate-method".equals(conditionElement.getNodeName())) {
+            } else if ("if-validate-method".equals(nodeName)) {
                 return new IfValidateMethod(this, modelWidget, conditionElement);
-            } else if ("if-compare".equals(conditionElement.getNodeName())) {
+            } else if ("if-compare".equals(nodeName)) {
                 return new IfCompare(this, modelWidget, conditionElement);
-            } else if ("if-compare-field".equals(conditionElement.getNodeName())) {
+            } else if ("if-compare-field".equals(nodeName)) {
                 return new IfCompareField(this, modelWidget, conditionElement);
-            } else if ("if-regexp".equals(conditionElement.getNodeName())) {
+            } else if ("if-regexp".equals(nodeName)) {
                 return new IfRegexp(this, modelWidget, conditionElement);
-            } else if ("if-empty".equals(conditionElement.getNodeName())) {
+            } else if ("if-empty".equals(nodeName)) {
                 return new IfEmpty(this, modelWidget, conditionElement);
-            } else if ("if-entity-permission".equals(conditionElement.getNodeName())) {
+            } else if ("if-entity-permission".equals(nodeName)) {
                 return new IfEntityPermission(this, modelWidget, conditionElement);
             } else {
-                throw new IllegalArgumentException("Condition element not supported with name: " + conditionElement.getNodeName());
+                throw new IllegalArgumentException("Condition element not supported with name: " + nodeName);
             }
         }
     }
@@ -497,8 +488,7 @@ public abstract class ModelWidgetCondition implements Serializable {
                 Map<String, Object> resp;
                 try {
                     resp = dispatcher.runSync(permService.name, svcCtx, 300, true);
-                }
-                catch (GenericServiceException e) {
+                } catch (GenericServiceException e) {
                     Debug.logError(e, MODULE);
                     return false;
                 }
@@ -554,8 +544,8 @@ public abstract class ModelWidgetCondition implements Serializable {
             if (fieldString == null) {
                 fieldString = "";
             }
-            Class<?>[] paramTypes = { String.class };
-            Object[] params = new Object[] { fieldString };
+            Class<?>[] paramTypes = {String.class };
+            Object[] params = new Object[] {fieldString };
             Class<?> valClass;
             try {
                 valClass = ObjectType.loadClass(className);

@@ -34,7 +34,7 @@ import org.w3c.dom.Element;
  */
 public class ValidateMethod extends SimpleMapOperation {
 
-    public static final String MODULE = ValidateMethod.class.getName();
+    private static final String MODULE = ValidateMethod.class.getName();
 
     String className;
     String methodName;
@@ -58,7 +58,7 @@ public class ValidateMethod extends SimpleMapOperation {
         if (loader == null) {
             loader = Thread.currentThread().getContextClassLoader();
         }
-        Class<?>[] paramTypes = new Class<?>[] { String.class };
+        Class<?>[] paramTypes = new Class<?>[] {String.class };
         Object[] params = new Object[] { fieldValue };
         Class<?> valClass;
         try {

@@ -42,12 +42,11 @@ import com.ibm.icu.util.Calendar;
 
 /**
  * Implements the &lt;set-calendar&gt; element.
- * 
  * @see <a href="https://cwiki.apache.org/confluence/display/OFBIZ/Mini+Language+-+minilang+-+simple-method+-+Reference">Mini-language Referenc</a>
  */
 public final class SetCalendar extends MethodOperation {
 
-    public static final String MODULE = SetCalendar.class.getName();
+    private static final String MODULE = SetCalendar.class.getName();
 
     // This method is needed only during the v1 to v2 transition
     private static boolean autoCorrect(Element element) {

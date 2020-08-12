@@ -56,7 +56,7 @@ import org.w3c.dom.Element;
  */
 public final class ComponentConfig {
 
-    public static final String MODULE = ComponentConfig.class.getName();
+    private static final String MODULE = ComponentConfig.class.getName();
     public static final String OFBIZ_COMPONENT_XML_FILENAME = "ofbiz-component.xml";
     // This map is not a UtilCache instance because there is no strategy or implementation for reloading components.
     private static final ComponentConfigCache componentConfigCache = new ComponentConfigCache();
@@ -264,7 +264,7 @@ public final class ComponentConfig {
         }
         return info;
     }
-    
+
     // ========== ComponentConfig instance ==========
 
     private final String globalName;
@@ -459,7 +459,7 @@ public final class ComponentConfig {
                 .flatMap(element -> {
                     try {
                         return Stream.of(mapper.apply(this, element));
-                    } catch(IllegalArgumentException e) {
+                    } catch (IllegalArgumentException e) {
                         Debug.log(e.getMessage());
                         return Stream.empty();
                     }
@@ -667,7 +667,7 @@ public final class ComponentConfig {
             return componentConfig.rootLocation().resolve(location);
         }
 
-        public static enum Type {
+        public enum Type {
             DIR, JAR;
 
             private static Type of(String type) {
@@ -834,7 +834,7 @@ public final class ComponentConfig {
         }
     }
 
-    public static abstract class ResourceInfo {
+    public abstract static class ResourceInfo {
         private final ComponentConfig componentConfig;
         private final String loader;
         private final String location;
@@ -1117,7 +1117,7 @@ public final class ComponentConfig {
                 this.basePermission = basePermStr.split(",");
             } else {
                 // default base permission is NONE
-                this.basePermission = new String[] { "NONE" };
+                this.basePermission = new String[] {"NONE" };
             }
             // trim the permissions (remove spaces)
             for (int i = 0; i < this.basePermission.length; i++) {

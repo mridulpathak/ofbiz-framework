@@ -35,7 +35,7 @@ import org.w3c.dom.Element;
  */
 public abstract class FieldInfo {
 
-    public static final String MODULE = FieldInfo.class.getName();
+    private static final String MODULE = FieldInfo.class.getName();
 
     public static final int DISPLAY = 1;
     public static final int HYPERLINK = 2;
@@ -125,7 +125,7 @@ public abstract class FieldInfo {
     }
 
     public static boolean isInputFieldType(Integer fieldType) {
-        return ! nonInputFieldTypeList.contains(fieldType);
+        return !nonInputFieldTypeList.contains(fieldType);
     }
 
     private final int fieldType;

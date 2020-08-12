@@ -40,7 +40,7 @@ import org.apache.ofbiz.entity.util.EntityQuery;
  */
 public final class KeywordSearchUtil {
 
-    public static final String MODULE = KeywordSearchUtil.class.getName();
+    private static final String MODULE = KeywordSearchUtil.class.getName();
 
     private static Set<String> thesaurusRelsToInclude = new HashSet<>();
     private static Set<String> thesaurusRelsForReplace = new HashSet<>();
@@ -57,7 +57,7 @@ public final class KeywordSearchUtil {
         thesaurusRelsForReplace.add("KWTR_CS");
     }
 
-    private KeywordSearchUtil () {}
+    private KeywordSearchUtil() { }
 
     public static String getSeparators() {
         String seps = UtilProperties.getPropertyValue("keywordsearch", "index.keyword.separators", ";: ,.!?\t\"\'\r\n\\/()[]{}*%<>-+_");
@@ -161,7 +161,7 @@ public final class KeywordSearchUtil {
                 // replace all %% with %
                 int dblPercIdx = -1;
                 while ((dblPercIdx = strSb.indexOf("%%")) >= 0) {
-                    strSb.replace(dblPercIdx, dblPercIdx+2, "%");
+                    strSb.replace(dblPercIdx, dblPercIdx + 2, "%");
                 }
                 token = strSb.toString();
             }

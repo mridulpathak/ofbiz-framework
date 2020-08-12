@@ -43,7 +43,7 @@ import org.apache.commons.codec.binary.Hex;
 public class StringUtil {
 
     public static final StringUtil INSTANCE = new StringUtil();
-    public static final String MODULE = StringUtil.class.getName();
+    private static final String MODULE = StringUtil.class.getName();
     private static final Map<String, Pattern> substitutionPatternMap = createSubstitutionPatternMap();
 
     private static Map<String, Pattern> createSubstitutionPatternMap() {
@@ -124,7 +124,7 @@ public class StringUtil {
             return null;
         }
 
-        st = (delim != null? new StringTokenizer(str, delim): new StringTokenizer(str));
+        st = (delim != null ? new StringTokenizer(str, delim) : new StringTokenizer(str));
 
         if (st.hasMoreTokens()) {
             splitList = new LinkedList<>();

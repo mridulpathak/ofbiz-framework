@@ -48,7 +48,7 @@ import junit.framework.TestSuite;
  * Use this class in a JUnit test runner to bootstrap the Test Suite runner.
  */
 public class ModelTestSuite {
-    public static final String MODULE = ModelTestSuite.class.getName();
+    private static final String MODULE = ModelTestSuite.class.getName();
     public static final String DELEGATOR_NAME = "test";
     public static final String DISPATCHER_NAME = "test-dispatcher";
 
@@ -130,7 +130,7 @@ public class ModelTestSuite {
                 Class<?> cl;
                 cl = Class.forName(className);
                 Constructor<?> con = cl.getConstructor(String.class, Element.class);
-                this.testList.add((Test)con.newInstance(caseName, testElement));
+                this.testList.add((Test) con.newInstance(caseName, testElement));
             } catch (Exception e) {
                 Debug.logError(e, MODULE);
             }
@@ -174,9 +174,9 @@ public class ModelTestSuite {
                 prepareTest(subTests.nextElement());
             }
         } else if (test instanceof EntityTestCase) {
-            ((EntityTestCase)test).setDelegator(delegator);
+            ((EntityTestCase) test).setDelegator(delegator);
             if (test instanceof OFBizTestCase) {
-                ((OFBizTestCase)test).setDispatcher(dispatcher);
+                ((OFBizTestCase) test).setDispatcher(dispatcher);
             }
         }
     }

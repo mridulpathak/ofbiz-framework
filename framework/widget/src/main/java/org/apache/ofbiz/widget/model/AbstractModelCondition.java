@@ -72,7 +72,7 @@ public abstract class AbstractModelCondition implements Serializable, ModelCondi
      *
      */
 
-    public static final String MODULE = AbstractModelCondition.class.getName();
+    private static final String MODULE = AbstractModelCondition.class.getName();
     public static final ModelConditionFactory DEFAULT_CONDITION_FACTORY = new DefaultConditionFactory();
 
     public static List<ModelCondition> readSubConditions(ModelConditionFactory factory, ModelWidget modelWidget,
@@ -180,7 +180,7 @@ public abstract class AbstractModelCondition implements Serializable, ModelCondi
             if (conditionElement == null) {
                 return TRUE;
             }
-            String nodeName = conditionElement.getNodeName();
+            String nodeName = conditionElement.getLocalName();
             if ("and".equals(nodeName)) {
                 return new And(factory, modelWidget, conditionElement);
             } else if ("xor".equals(nodeName)) {
@@ -613,8 +613,7 @@ public abstract class AbstractModelCondition implements Serializable, ModelCondi
                 Map<String, Object> resp;
                 try {
                     resp = dispatcher.runSync(permService.name, svcCtx, 300, true);
-                }
-                catch (GenericServiceException e) {
+                } catch (GenericServiceException e) {
                     Debug.logError(e, MODULE);
                     return false;
                 }
@@ -691,7 +690,7 @@ public abstract class AbstractModelCondition implements Serializable, ModelCondi
             if (fieldString == null) {
                 fieldString = "";
             }
-            Class<?>[] paramTypes = { String.class };
+            Class<?>[] paramTypes = {String.class };
             Object[] params = new Object[] { fieldString };
             Class<?> valClass;
             try {

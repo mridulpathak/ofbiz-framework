@@ -54,8 +54,8 @@ import org.apache.ofbiz.entity.util.EntityUtil;
 
 public class ContentSearch {
 
-    public static final String MODULE = ContentSearch.class.getName();
-    public static final String resource = "ContentUiLabels";
+    private static final String MODULE = ContentSearch.class.getName();
+    private static final String RESOURCE = "ContentUiLabels";
 
     public static ArrayList<String> searchContents(List<? extends ContentSearchConstraint> contentSearchConstraintList, ResultSortOrder resultSortOrder, Delegator delegator, String visitId) {
         ContentSearchContext contentSearchContext = new ContentSearchContext(delegator, visitId);
@@ -176,7 +176,7 @@ public class ContentSearch {
             }
 
             long endMillis = System.currentTimeMillis();
-            double totalSeconds = ((double)endMillis - (double)startMillis)/1000.0;
+            double totalSeconds = ((double) endMillis - (double) startMillis) / 1000.0;
 
             // store info about results in the database, attached to the user's visitId, if specified
             this.saveSearchResultInfo((long) contentIds.size(), totalSeconds);
@@ -274,7 +274,7 @@ public class ContentSearch {
         /**
          * @param delegator the delegator
          * @return EntityListIterator representing the result of the query: NOTE THAT THIS MUST BE CLOSED WHEN YOU ARE
-         *      DONE WITH IT (preferably in a finally block), 
+         *      DONE WITH IT (preferably in a finally block),
          *      AND DON'T LEAVE IT OPEN TOO LONG BECAUSE IT WILL MAINTAIN A DATABASE CONNECTION.
          */
         public EntityListIterator doQuery(Delegator delegator) {
@@ -319,7 +319,9 @@ public class ContentSearch {
                     hasResults = true;
                 }
                 if (resultOffset != null && resultOffset > 1) {
-                    if (Debug.infoOn()) Debug.logInfo("Before relative, current index=" + eli.currentIndex(), MODULE);
+                    if (Debug.infoOn()) {
+                        Debug.logInfo("Before relative, current index=" + eli.currentIndex(), MODULE);
+                    }
                     hasResults = eli.relative(resultOffset - 1);
                     initialResult = null;
                 }
@@ -432,7 +434,7 @@ public class ContentSearch {
     // ======================================================================
 
     @SuppressWarnings("serial")
-    public static abstract class ContentSearchConstraint implements java.io.Serializable {
+    public abstract static class ContentSearchConstraint implements java.io.Serializable {
         public ContentSearchConstraint() { }
 
         public abstract void addConstraint(ContentSearchContext contentSearchContext);
@@ -502,7 +504,7 @@ public class ContentSearch {
             contentSearchContext.dynamicViewEntity.addAlias(entityAlias, prefix + "ContentAssocTypeId", "contentAssocTypeId", null, null, null, null);
             contentSearchContext.dynamicViewEntity.addAlias(entityAlias, prefix + "FromDate", "fromDate", null, null, null, null);
             contentSearchContext.dynamicViewEntity.addAlias(entityAlias, prefix + "ThruDate", "thruDate", null, null, null, null);
-            contentSearchContext.dynamicViewEntity.addViewLink("CNT", entityAlias, Boolean.TRUE, ModelKeyMap.makeKeyMapList("contentId","contentIdTo"));
+            contentSearchContext.dynamicViewEntity.addViewLink("CNT", entityAlias, Boolean.TRUE, ModelKeyMap.makeKeyMapList("contentId", "contentIdTo"));
 
             List<EntityExpr> assocConditionToFrom = new LinkedList<>();
             assocConditionToFrom.add(EntityCondition.makeCondition(prefix + "ContentIdFrom", EntityOperator.IN, contentIdSet));
@@ -534,7 +536,7 @@ public class ContentSearch {
             }
 
             StringBuilder ppBuf = new StringBuilder();
-            ppBuf.append(UtilProperties.getMessage(resource, "ContentAssoc", locale) + ": ");
+            ppBuf.append(UtilProperties.getMessage(RESOURCE, "ContentAssoc", locale) + ": ");
             if (content != null) {
                 ppBuf.append(content.getString("contentName"));
             }
@@ -554,7 +556,7 @@ public class ContentSearch {
                 }
             }
             if (this.includeSubContents) {
-                ppBuf.append(" (").append(UtilProperties.getMessage(resource, "ContentIncludeAllSubContents", locale)).append(")");
+                ppBuf.append(" (").append(UtilProperties.getMessage(RESOURCE, "ContentIncludeAllSubContents", locale)).append(")");
             }
             return ppBuf.toString();
         }
@@ -685,9 +687,9 @@ public class ContentSearch {
         @Override
         public String prettyPrintConstraint(Delegator delegator, boolean detailed, Locale locale) {
             StringBuilder ppBuf = new StringBuilder();
-            ppBuf.append(UtilProperties.getMessage(resource, "ContentKeywords", locale)).append(": \"");
-            ppBuf.append(this.keywordsString).append("\", ").append(UtilProperties.getMessage(resource, "ContentKeywordWhere", locale)).append(" ");
-            ppBuf.append(isAnd ? UtilProperties.getMessage(resource, "ContentKeywordAllWordsMatch", locale) : UtilProperties.getMessage(resource, "ContentKeywordAnyWordMatches", locale));
+            ppBuf.append(UtilProperties.getMessage(RESOURCE, "ContentKeywords", locale)).append(": \"");
+            ppBuf.append(this.keywordsString).append("\", ").append(UtilProperties.getMessage(RESOURCE, "ContentKeywordWhere", locale)).append(" ");
+            ppBuf.append(isAnd ? UtilProperties.getMessage(RESOURCE, "ContentKeywordAllWordsMatch", locale) : UtilProperties.getMessage(RESOURCE, "ContentKeywordAnyWordMatches", locale));
             return ppBuf.toString();
         }
 
@@ -773,15 +775,15 @@ public class ContentSearch {
             contentSearchContext.entityConditionList.add(conditions);
 
             // add in contentSearchConstraint, don't worry about the contentSearchResultId or constraintSeqId, those will be fill in later
-            contentSearchContext.contentSearchConstraintList.add(contentSearchContext.getDelegator().makeValue("ContentSearchConstraint", UtilMisc.toMap("constraintName", constraintName, "infoString","fromDate : " + fromDate + " thruDate : " + thruDate)));
+            contentSearchContext.contentSearchConstraintList.add(contentSearchContext.getDelegator().makeValue("ContentSearchConstraint", UtilMisc.toMap("constraintName", constraintName, "infoString", "fromDate : " + fromDate + " thruDate : " + thruDate)));
         }
 
         /** pretty print for log messages and even UI stuff */
         @Override
         public String prettyPrintConstraint(Delegator delegator, boolean detailed, Locale locale) {
             StringBuilder ppBuf = new StringBuilder();
-            ppBuf.append(UtilProperties.getMessage(resource, "ContentLastModified", locale)).append(": \"");
-            ppBuf.append(fromDate).append("-").append(thruDate).append("\", ").append(UtilProperties.getMessage(resource, "ContentLastModified", locale)).append(" ");
+            ppBuf.append(UtilProperties.getMessage(RESOURCE, "ContentLastModified", locale)).append(": \"");
+            ppBuf.append(fromDate).append("-").append(thruDate).append("\", ").append(UtilProperties.getMessage(RESOURCE, "ContentLastModified", locale)).append(" ");
             return ppBuf.toString();
         }
 
@@ -830,7 +832,7 @@ public class ContentSearch {
     // ======================================================================
 
     @SuppressWarnings("serial")
-    public static abstract class ResultSortOrder implements java.io.Serializable {
+    public abstract static class ResultSortOrder implements java.io.Serializable {
         public ResultSortOrder() {
         }
 
@@ -861,7 +863,7 @@ public class ContentSearch {
 
         @Override
         public String prettyPrintSortOrder(boolean detailed, Locale locale) {
-            return UtilProperties.getMessage(resource, "ContentKeywordRelevancy", locale);
+            return UtilProperties.getMessage(RESOURCE, "ContentKeywordRelevancy", locale);
         }
 
         @Override
@@ -908,13 +910,13 @@ public class ContentSearch {
         @Override
         public String prettyPrintSortOrder(boolean detailed, Locale locale) {
             if ("contentName".equals(this.fieldName)) {
-                return UtilProperties.getMessage(resource, "ContentName", locale);
+                return UtilProperties.getMessage(RESOURCE, "ContentName", locale);
             } else if ("totalQuantityOrdered".equals(this.fieldName)) {
-                return UtilProperties.getMessage(resource, "ContentPopularityByOrders", locale);
+                return UtilProperties.getMessage(RESOURCE, "ContentPopularityByOrders", locale);
             } else if ("totalTimesViewed".equals(this.fieldName)) {
-                return UtilProperties.getMessage(resource, "ContentPopularityByViews", locale);
+                return UtilProperties.getMessage(RESOURCE, "ContentPopularityByViews", locale);
             } else if ("averageCustomerRating".equals(this.fieldName)) {
-                return UtilProperties.getMessage(resource, "ContentCustomerRating", locale);
+                return UtilProperties.getMessage(RESOURCE, "ContentCustomerRating", locale);
             }
             return this.fieldName;
         }
