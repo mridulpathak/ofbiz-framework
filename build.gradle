@@ -667,6 +667,156 @@ task testIntegration(group: ofbizServer) {
     description = 'Run OFBiz integration tests; You must run loadAll before running this task'
 }
 
+// MigrationCoverageLinter's rules live in src/main/java, compiled onto
+// sourceSets.main.runtimeClasspath - not on this build script's own classpath - so they can't be
+// called directly by fully-qualified name here. Loaded and invoked via reflection against a
+// URLClassLoader instead, reusing the same classloader-based pattern already established by
+// verifyTestdefClassNames/flagUnorderedJupiterTests above (those load test classes off
+// sourceSets.test.runtimeClasspath; this loads a main class off sourceSets.main.runtimeClasspath).
+task checkMigrationCoverage(group: ofbizServer, dependsOn: classes) {
+    description = 'Fails if an entitydef/entitymodel*.xml changed in a component that has migrations/ ' +
+            'coverage without a matching new file under that component\'s migrations/ tree, or if an ' +
+            'already-committed migration file was modified, renamed or deleted.'
+    def mainRuntimeClasspath = sourceSets.main.runtimeClasspath
+    inputs.files(mainRuntimeClasspath)
+    doLast {
+        def gitFolder = rootProject.file('.git')
+        if (!gitFolder.exists()) {
+            logger.warn('checkMigrationCoverage: skipping - Git is not used (no .git found).')
+            return
+        }
+
+        def baseRef = project.findProperty('migrationCheckBaseRef') ?: 'origin/trunk'
+
+        // A shallow CI checkout or a source-release archive may have no usable baseRef at all (e.g.
+        // no origin/trunk remote-tracking ref). Skipping this lint gate in that case beats breaking
+        // every such build; a real, resolvable diff that finds a genuine violation still fails loudly
+        // below, this only guards the "can we compute a diff at all" precondition.
+        def refOutput = new ByteArrayOutputStream()
+        def refResult = exec {
+            workingDir = rootDir
+            commandLine 'git', 'rev-parse', '--verify', '--quiet', baseRef
+            ignoreExitValue = true
+            standardOutput = refOutput
+            errorOutput = refOutput
+        }
+        if (refResult.exitValue != 0) {
+            logger.warn("checkMigrationCoverage: skipping - '${baseRef}' does not resolve in ${rootDir} " +
+                    '(shallow checkout, source archive, or missing remote-tracking ref?). ' +
+                    'Migration coverage was not checked for this build.')
+            return
+        }
+
+        // Collects `git diff --name-status` entries from one git repository as [status, path] maps.
+        // pathPrefix rewrites paths to be relative to the framework repository root, matching how
+        // migratedComponents below names components ('plugins/example', ...). lenient is for the
+        // paired plugins/ repository: it is a separate repository (and gitignored here), so it may
+        // legitimately not know this baseRef - under-checking there beats failing every `check`.
+        def nameStatusEntries = { File repoDir, String pathPrefix, boolean lenient ->
+            def stdout = new ByteArrayOutputStream()
+            def stderr = new ByteArrayOutputStream()
+            def failure = null
+            int exitValue = -1
+            try {
+                exitValue = exec {
+                    workingDir = repoDir
+                    commandLine 'git', 'diff', '--name-status', "${baseRef}...HEAD"
+                    standardOutput = stdout
+                    errorOutput = stderr
+                    ignoreExitValue = true
+                }.exitValue
+            } catch (Exception e) {
+                failure = e.message
+            }
+            if (failure != null || exitValue != 0) {
+                def reason = failure ?: "git exited ${exitValue}: ${stderr.toString().trim()}"
+                if (!lenient) {
+                    throw new GradleException("checkMigrationCoverage: cannot diff ${repoDir} against '${baseRef}' - ${reason}")
+                }
+                logger.warn("checkMigrationCoverage: skipping the plugins repository at ${repoDir} - ${reason}. "
+                        + 'Migration coverage was checked against the framework repository only.')
+                return []
+            }
+            return stdout.toString().readLines()
+                    .findAll { !it.isBlank() }
+                    .collect { line ->
+                        def fields = line.split('\t')
+                        // Rename/copy entries carry both the old and the new path (3 fields); every
+                        // other status has just one (2 fields). oldPath falls back to the single path
+                        // when there is no rename, so callers that only care about "the file as it
+                        // existed before this change" (was IT a migration?) and callers that only care
+                        // about "the file as it exists now" (did a migration get added?) each get the
+                        // side they actually need.
+                        def status = fields[0].trim()
+                        def newPath = pathPrefix + fields[-1].trim()
+                        def oldPath = fields.size() > 2 ? pathPrefix + fields[1].trim() : newPath
+                        [status: status, path: newPath, oldPath: oldPath]
+                    }
+        }
+
+        // The one migrated component today (plugins/example) lives in the separate, gitignored
+        // plugins/ repository, so diffing only this repository would never see it at all.
+        def entries = nameStatusEntries(rootDir, '', false) + nameStatusEntries(file(pluginsDir), 'plugins/', true)
+        def changedFiles = entries.collect { it.path }
+        logger.info("checkMigrationCoverage: ${changedFiles.size()} changed file(s) against '${baseRef}' "
+                + "across the framework and plugins repositories")
+
+        def migratedComponents = fileTree(dir: rootDir, include: '**/migrations/*/*.sql')
+                .collect { it.toPath() }
+                .collect { rootDir.toPath().relativize(it) }
+                .collect { it.toString().replace(File.separator, '/') }
+                .collect { it.substring(0, it.indexOf('/migrations/')) }
+                .toSet()
+
+        URL[] classpathUrls = mainRuntimeClasspath.files.collect { it.toURI().toURL() }
+        def violations
+        new URLClassLoader(classpathUrls, getClass().classLoader).withCloseable { classpathLoader ->
+            def linterClass = classpathLoader.loadClass('org.apache.ofbiz.entity.migration.MigrationCoverageLinter')
+            def isNonAdditiveChange = linterClass.getMethod('isNonAdditiveChange', String)
+            // Anything other than a plain addition (M, D, or a rename/copy R<nnn>/C<nnn>) touches a
+            // migration file that may already have been applied somewhere - never just an in-place edit.
+            // Uses oldPath, not path: a rename's danger is to whatever the file WAS before the change
+            // (an already-applied migration renamed away from its committed name/location), not to
+            // wherever it ends up now - using the new path would both miss a migration renamed OUT of
+            // migrations/ and falsely flag an unrelated file renamed INTO migrations/ (that's just a
+            // normal new-migration addition, already covered by the findViolations check below).
+            def changedMigrationPaths = entries.findAll { isNonAdditiveChange.invoke(null, it.status) }.collect { it.oldPath }
+            logger.info("checkMigrationCoverage: ${changedMigrationPaths.size()} file(s) that were already-committed "
+                    + "migrations changed other than by addition")
+            violations = linterClass.getMethod('findViolations', List, Set).invoke(null, changedFiles, migratedComponents)
+            violations += linterClass.getMethod('findChangedMigrationViolations', List).invoke(null, changedMigrationPaths)
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Migration coverage check failed:\n" + violations.join('\n'))
+        }
+    }
+}
+check.dependsOn checkMigrationCoverage
+
+task baselineMigration(group: ofbizServer, dependsOn: classes) {
+    description = 'Baseline an existing component\'s Flyway history without running its migration SQL. ' +
+            'Run a drift audit first. Usage: ./gradlew baselineMigration -Pcomponent=example ' +
+            '-PbaselineVersion=1 [-PbaselineDescription=baseline] [-PdelegatorName=default]'
+    doLast {
+        ['component', 'baselineVersion'].each { required ->
+            if (!project.findProperty(required)) {
+                throw new GradleException("baselineMigration requires -P${required}=<value>. ${description}")
+            }
+        }
+        javaexec {
+            classpath = sourceSets.main.runtimeClasspath
+            mainClass = 'org.apache.ofbiz.entity.migration.BaselineComponentMigration'
+            systemProperty 'ofbiz.home', rootDir.absolutePath
+            args = [
+                (project.findProperty('delegatorName') ?: 'default').toString(),
+                project.findProperty('component').toString(),
+                project.findProperty('baselineVersion').toString(),
+                (project.findProperty('baselineDescription') ?: 'baseline').toString(),
+            ]
+        }
+    }
+}
+
 task terminateOfbiz(group: ofbizServer,
     description: 'Force termination of any running OFBiz servers, only use if \"--shutdown\" command fails') {
     doLast {

@@ -69,6 +69,7 @@ dependencies {
     implementation libs.groovy.all
     implementation libs.freemarker
     implementation libs.esapi
+    implementation libs.flyway.core
     implementation libs.spring.test
     implementation libs.spring.web
     implementation libs.jackson.databind
@@ -102,6 +103,8 @@ dependencies {
     runtimeOnly libs.axis2.transport.http
     runtimeOnly libs.axis2.transport.local
     runtimeOnly libs.h2
+    runtimeOnly libs.flyway.mysql
+    runtimeOnly libs.flyway.database.postgresql
     runtimeOnly libs.geronimo.jaxrpc.spec
     runtimeOnly libs.log4j.legacy.api // for external jars using the old log4j1.2: routes logging to log4j 2
     runtimeOnly libs.log4j.jul // for external jars using the java.util.logging: routes logging to log4j 2
