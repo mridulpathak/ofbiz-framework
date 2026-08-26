@@ -38,6 +38,7 @@ public final class Datasource {
     private final String name; // type = xs:string
     private final String helperClass; // type = xs:string
     private final String fieldTypeName; // type = xs:string
+    private final String schemaManagementStrategy; // type = xs:string
     private final boolean useSchemas;
     private final String schemaName; // type = xs:string
     private final boolean checkOnStart;
@@ -91,6 +92,11 @@ public final class Datasource {
             throw new GenericEntityConfException("<datasource> element field-type-name attribute is empty" + lineNumberText);
         }
         this.fieldTypeName = fieldTypeName;
+        String schemaManagementStrategy = element.getAttribute("schema-management-strategy").intern();
+        if (schemaManagementStrategy.isEmpty()) {
+            schemaManagementStrategy = "auto-ddl";
+        }
+        this.schemaManagementStrategy = schemaManagementStrategy;
         this.useSchemas = !"false".equals(element.getAttribute("use-schemas"));
         this.schemaName = element.getAttribute("schema-name").intern();
         this.checkOnStart = !"false".equals(element.getAttribute("check-on-start"));
@@ -331,6 +337,11 @@ public final class Datasource {
     /** Returns the value of the <code>join-style</code> attribute. */
     public String getJoinStyle() {
         return this.joinStyle;
+    }
+
+    /** Returns the value of the <code>schema-management-strategy</code> attribute. */
+    public String getSchemaManagementStrategy() {
+        return this.schemaManagementStrategy;
     }
 
     /** Returns the value of the <code>alias-view-columns</code> attribute. */

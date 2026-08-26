@@ -18,8 +18,6 @@
  *******************************************************************************/
 package org.apache.ofbiz.entity.migration;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import org.apache.ofbiz.base.component.ComponentConfig;
@@ -27,8 +25,11 @@ import org.apache.ofbiz.base.container.Container;
 import org.apache.ofbiz.base.container.ContainerConfig;
 import org.apache.ofbiz.base.container.ContainerException;
 import org.apache.ofbiz.base.start.StartupCommand;
-import org.apache.ofbiz.base.util.Debug;
 import org.apache.ofbiz.entity.GenericEntityConfException;
+import org.apache.ofbiz.entity.config.model.Datasource;
+import org.apache.ofbiz.entity.config.model.DelegatorElement;
+import org.apache.ofbiz.entity.config.model.EntityConfig;
+import org.apache.ofbiz.entity.config.model.GroupMap;
 
 /**
  * Runs, once per boot and before {@link org.apache.ofbiz.entity.DelegatorContainer}, any
@@ -37,7 +38,8 @@ import org.apache.ofbiz.entity.GenericEntityConfException;
  */
 public class MigrationContainer implements Container {
 
-    private static final String MODULE = MigrationContainer.class.getName();
+    private static final SchemaManagementStrategy AUTO_DDL_STRATEGY = new AutoDdlStrategy();
+    private static final SchemaManagementStrategy FLYWAY_STRATEGY = new FlywayStrategy();
 
     private String name;
     private String delegatorName;
@@ -52,8 +54,27 @@ public class MigrationContainer implements Container {
     @Override
     public boolean start() throws ContainerException {
         try {
-            for (MigrationSupport.JdbcTarget target : MigrationSupport.resolveJdbcTargets(delegatorName)) {
-                runMigrationsForDatasource(target);
+            List<ComponentConfig> components = ComponentConfig.components().toList();
+            DelegatorElement delegator = EntityConfig.getInstance().getDelegator(delegatorName);
+            if (delegator == null) {
+                throw new GenericEntityConfException("No <delegator> named '" + delegatorName + "' found in entityengine.xml");
+            }
+            for (GroupMap groupMap : delegator.getGroupMapList()) {
+                // Cheap, credential-free check first: only resolve real JDBC info (including password
+                // decryption) for datasources whose strategy actually resolves to Flyway. A datasource
+                // left at the default "auto-ddl" must never trigger credential resolution here.
+                Datasource datasource = EntityConfig.getDatasource(groupMap.getDatasourceName());
+                String strategyValue = datasource == null ? null : datasource.getSchemaManagementStrategy();
+                SchemaManagementStrategy strategy = resolveStrategy(strategyValue);
+                if (strategy == AUTO_DDL_STRATEGY) {
+                    continue;
+                }
+                MigrationSupport.JdbcTarget target =
+                        MigrationSupport.resolveJdbcTarget(groupMap.getGroupName(), groupMap.getDatasourceName());
+                if (target == null) {
+                    continue;
+                }
+                strategy.apply(delegatorName, target, components);
             }
             return true;
         } catch (GenericEntityConfException e) {
@@ -61,52 +82,11 @@ public class MigrationContainer implements Container {
         }
     }
 
-    private void runMigrationsForDatasource(MigrationSupport.JdbcTarget target) throws ContainerException {
-        // Materialised rather than consumed as a stream so that migrateComponent's ContainerException,
-        // being checked, can propagate straight out of start() into ContainerLoader's normal
-        // startup-failure handling instead of being smuggled through a lambda as a RuntimeException.
-        List<ComponentConfig> components = ComponentConfig.components().toList();
-        for (ComponentConfig component : components) {
-            migrateComponent(component.rootLocation(), component.getComponentName(), target.vendor(),
-                    target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword());
+    static SchemaManagementStrategy resolveStrategy(String schemaManagementStrategyValue) {
+        if ("flyway".equals(schemaManagementStrategyValue)) {
+            return FLYWAY_STRATEGY;
         }
-    }
-
-    /**
-     * Runs one component's migrations for one vendor against one JDBC connection. No-ops when the
-     * component ships no migrations for this vendor, warning first if it ships migrations for other
-     * vendors only — in that case the Entity Engine's auto-DDL will create the component's tables
-     * while Flyway silently never manages them on this datasource.
-     * @param componentRoot the component's root directory
-     * @param componentName the component name, used for the history table and error attribution
-     * @param vendor the active datasource's {@code field-type-name}
-     * @param jdbcUrl the target JDBC URL
-     * @param jdbcUsername the target JDBC username
-     * @param jdbcPassword the target JDBC password
-     * @throws ContainerException if this component's migrations fail, so that OFBiz shuts down cleanly
-     */
-    void migrateComponent(Path componentRoot, String componentName, String vendor,
-            String jdbcUrl, String jdbcUsername, String jdbcPassword) throws ContainerException {
-        Path migrationsDir = MigrationSupport.migrationsDirectory(componentRoot, vendor);
-        if (!Files.isDirectory(migrationsDir)) {
-            if (MigrationSupport.hasAnyMigrationsDirectory(componentRoot)) {
-                Debug.logWarning("Component '" + componentName + "' ships migrations but none for the active vendor '"
-                        + vendor + "' (expected " + migrationsDir + "): its tables will be created by Entity Engine"
-                        + " auto-DDL and never tracked by Flyway on this datasource", MODULE);
-            }
-            return;
-        }
-        String historyTable = MigrationSupport.historyTableName(componentName);
-        Debug.logInfo("Running migrations for component '" + componentName
-                + "' (vendor=" + vendor + ") from " + migrationsDir, MODULE);
-        ComponentMigrator migrator = new ComponentMigrator(jdbcUrl, jdbcUsername, jdbcPassword, migrationsDir, historyTable);
-        try {
-            migrator.migrate();
-        } catch (Exception e) {
-            String errorMessage = "Migration failed for component '" + componentName + "'";
-            Debug.logError(e, errorMessage, MODULE);
-            throw new ContainerException(errorMessage, e);
-        }
+        return AUTO_DDL_STRATEGY;
     }
 
     @Override

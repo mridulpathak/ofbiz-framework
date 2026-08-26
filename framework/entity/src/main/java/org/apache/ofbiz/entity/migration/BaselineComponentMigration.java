@@ -20,9 +20,15 @@ package org.apache.ofbiz.entity.migration;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.Set;
 
 import org.apache.ofbiz.base.util.Debug;
+import org.apache.ofbiz.entity.GenericEntityConfException;
+import org.apache.ofbiz.entity.GenericEntityException;
+import org.apache.ofbiz.entity.config.model.Datasource;
+import org.apache.ofbiz.entity.config.model.DelegatorElement;
+import org.apache.ofbiz.entity.config.model.EntityConfig;
+import org.apache.ofbiz.entity.config.model.GroupMap;
 
 /**
  * Standalone entry point for the {@code baselineMigration} Gradle task: adopts an existing
@@ -65,10 +71,53 @@ public final class BaselineComponentMigration {
                 + " matches this baseline.", MODULE);
 
         Path componentRoot = MigrationSupport.resolveComponentRoot(componentName);
-        List<MigrationSupport.JdbcTarget> targets = MigrationSupport.resolveJdbcTargets(delegatorName);
         String historyTable = MigrationSupport.historyTableName(componentName);
+
+        Set<String> componentGroups;
+        try {
+            componentGroups = MigrationSupport.resolveComponentEntityGroups(delegatorName, componentName);
+        } catch (GenericEntityException e) {
+            Debug.logError(e, "[baselineMigration] Could not resolve entity groups for component '" + componentName + "'",
+                    MODULE);
+            System.exit(1);
+            return;
+        }
+        componentGroups.remove(null);
+        if (componentGroups.isEmpty() && MigrationSupport.hasAnyMigrationsDirectory(componentRoot)) {
+            Debug.logError("[baselineMigration] Component '" + componentName + "' ships migrations but no entity group"
+                    + " could be resolved for it (it declares no <entity-resource type=\"model\">); refusing to baseline"
+                    + " it blindly", MODULE);
+            System.exit(1);
+            return;
+        }
+
+        DelegatorElement delegator = EntityConfig.getInstance().getDelegator(delegatorName);
+        if (delegator == null) {
+            throw new GenericEntityConfException("No <delegator> named '" + delegatorName + "' found in entityengine.xml");
+        }
+
         int baselined = 0;
-        for (MigrationSupport.JdbcTarget target : targets) {
+        for (GroupMap groupMap : delegator.getGroupMapList()) {
+            // Cheap, credential-free check first: only resolve real JDBC info (including password
+            // decryption) for datasources whose strategy actually resolves to Flyway. A datasource
+            // left at the default "auto-ddl" must never trigger credential resolution here.
+            Datasource datasource = EntityConfig.getDatasource(groupMap.getDatasourceName());
+            String strategyValue = datasource == null ? null : datasource.getSchemaManagementStrategy();
+            if (!(MigrationContainer.resolveStrategy(strategyValue) instanceof FlywayStrategy)) {
+                Debug.logInfo("[baselineMigration] Skipping datasource '" + groupMap.getDatasourceName()
+                        + "': schema-management-strategy is not 'flyway'", MODULE);
+                continue;
+            }
+            if (!componentGroups.contains(groupMap.getGroupName())) {
+                Debug.logInfo("[baselineMigration] Skipping datasource '" + groupMap.getDatasourceName() + "': component '"
+                        + componentName + "'s entities do not belong to group '" + groupMap.getGroupName() + "'", MODULE);
+                continue;
+            }
+            MigrationSupport.JdbcTarget target =
+                    MigrationSupport.resolveJdbcTarget(groupMap.getGroupName(), groupMap.getDatasourceName());
+            if (target == null) {
+                continue;
+            }
             Path migrationsDir = MigrationSupport.migrationsDirectory(componentRoot, target.vendor());
             if (!Files.isDirectory(migrationsDir)) {
                 Debug.logInfo("[baselineMigration] Skipping datasource '" + target.datasourceName() + "': component '"

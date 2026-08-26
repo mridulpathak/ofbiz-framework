@@ -21,19 +21,22 @@ package org.apache.ofbiz.entity.migration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.ofbiz.base.component.ComponentConfig;
 import org.apache.ofbiz.base.component.ComponentLoaderConfig;
 import org.apache.ofbiz.base.config.GenericConfigException;
+import org.apache.ofbiz.base.config.ResourceHandler;
 import org.apache.ofbiz.base.util.Debug;
 import org.apache.ofbiz.entity.GenericEntityConfException;
+import org.apache.ofbiz.entity.GenericEntityException;
 import org.apache.ofbiz.entity.config.model.Datasource;
-import org.apache.ofbiz.entity.config.model.DelegatorElement;
 import org.apache.ofbiz.entity.config.model.EntityConfig;
-import org.apache.ofbiz.entity.config.model.GroupMap;
 import org.apache.ofbiz.entity.config.model.InlineJdbc;
+import org.apache.ofbiz.entity.model.ModelGroupReader;
+import org.apache.ofbiz.entity.model.ModelReader;
 
 /**
  * Configuration lookups shared by the two entry points into Flyway-based component migrations:
@@ -53,38 +56,20 @@ final class MigrationSupport {
     /**
      * One migratable JDBC connection resolved from a datasource definition: everything
      * {@link ComponentMigrator} needs, plus the vendor that selects a component's migrations
-     * sub-directory.
+     * sub-directory, plus the entity group the datasource's group-map serves (so a component's
+     * migrations only run against the datasource(s) its own entities actually belong to).
      */
-    record JdbcTarget(String datasourceName, String vendor, String jdbcUrl, String jdbcUsername, String jdbcPassword) { }
-
-    /**
-     * Resolves every migratable datasource backing a delegator, in the delegator's own group-map order.
-     * @param delegatorName the {@code <delegator>} name from {@code entityengine.xml}
-     * @return the migratable targets; datasources without an {@code <inline-jdbc>} element are skipped
-     * @throws GenericEntityConfException if no such delegator is configured
-     */
-    static List<JdbcTarget> resolveJdbcTargets(String delegatorName) throws GenericEntityConfException {
-        DelegatorElement delegator = EntityConfig.getInstance().getDelegator(delegatorName);
-        if (delegator == null) {
-            throw new GenericEntityConfException("No <delegator> named '" + delegatorName + "' found in entityengine.xml");
-        }
-        List<JdbcTarget> targets = new ArrayList<>();
-        for (GroupMap groupMap : delegator.getGroupMapList()) {
-            JdbcTarget target = resolveJdbcTarget(groupMap.getDatasourceName());
-            if (target != null) {
-                targets.add(target);
-            }
-        }
-        return targets;
-    }
+    record JdbcTarget(String groupName, String datasourceName, String vendor, String jdbcUrl, String jdbcUsername,
+            String jdbcPassword) { }
 
     /**
      * Resolves a single datasource into a migratable target.
+     * @param groupName the entity group name the datasource is mapped to, e.g. {@code org.apache.ofbiz}
      * @param datasourceName the {@code <datasource>} name from {@code entityengine.xml}
      * @return the target, or {@code null} when the datasource is unknown or has no {@code <inline-jdbc>}
      * @throws GenericEntityConfException if the configured JDBC password cannot be resolved
      */
-    static JdbcTarget resolveJdbcTarget(String datasourceName) throws GenericEntityConfException {
+    static JdbcTarget resolveJdbcTarget(String groupName, String datasourceName) throws GenericEntityConfException {
         Datasource datasource = EntityConfig.getDatasource(datasourceName);
         if (datasource == null) {
             Debug.logWarning("Datasource '" + datasourceName + "' is not defined in entityengine.xml, skipping migrations", MODULE);
@@ -96,8 +81,36 @@ final class MigrationSupport {
                     + "' has no <inline-jdbc>, skipping migrations (JNDI datasources not yet supported)", MODULE);
             return null;
         }
-        return new JdbcTarget(datasourceName, datasource.getFieldTypeName(), jdbc.getJdbcUri(),
+        return new JdbcTarget(groupName, datasourceName, datasource.getFieldTypeName(), jdbc.getJdbcUri(),
                 jdbc.getJdbcUsername(), EntityConfig.getJdbcPassword(jdbc));
+    }
+
+    /**
+     * Resolves the entity group(s) a component's entities belong to, so a caller can tell whether a
+     * given datasource's group-map is one this component should actually be migrated against.
+     * @param delegatorName the {@code <delegator>} name from {@code entityengine.xml}, used to resolve
+     *      both the component's entity model and its entity-group mappings
+     * @param componentName the OFBiz component name
+     * @return the distinct entity group name(s) used by this component's entities; empty if the
+     *      component defines no entities
+     * @throws GenericEntityException if the delegator's model or entity-group configuration cannot be read
+     */
+    static Set<String> resolveComponentEntityGroups(String delegatorName, String componentName) throws GenericEntityException {
+        ModelReader modelReader = ModelReader.getModelReader(delegatorName);
+        ModelGroupReader groupReader = ModelGroupReader.getModelGroupReader(delegatorName);
+        Set<String> entityNames = new HashSet<>();
+        for (ComponentConfig.EntityResourceInfo resourceInfo : ComponentConfig.getAllEntityResourceInfos("model", componentName)) {
+            ResourceHandler handler = resourceInfo.createResourceHandler();
+            Collection<String> entities = modelReader.getResourceHandlerEntities(handler);
+            if (entities != null) {
+                entityNames.addAll(entities);
+            }
+        }
+        Set<String> groupNames = new HashSet<>();
+        for (String entityName : entityNames) {
+            groupNames.add(groupReader.getEntityGroupName(entityName, delegatorName));
+        }
+        return groupNames;
     }
 
     /**
