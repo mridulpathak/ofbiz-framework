@@ -55,7 +55,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "vendorhit");
 
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "h2", jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
 
         assertTrue(tableExists(jdbcUrl, "WIDGET"), "V1 should have run for the active vendor");
         assertEquals(1, historyRowCount(jdbcUrl, "flyway_schema_history_example"),
@@ -68,7 +68,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "hyphens");
 
-        new FlywayStrategy().migrateComponent(componentRoot, "my-plugin", "h2", jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "my-plugin", "default", "h2", null, jdbcUrl, USER, PASSWORD);
 
         assertEquals(1, historyRowCount(jdbcUrl, "flyway_schema_history_my_plugin"));
     }
@@ -79,7 +79,7 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "nomigrations");
 
         assertDoesNotThrow(() ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "h2", jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
 
         assertFalse(tableExists(jdbcUrl, "WIDGET"));
         // Flyway creates its history table with the exact (quoted, lowercase) name it was given -
@@ -97,7 +97,7 @@ public class FlywayStrategyTests {
         // The dangerous-but-not-fatal case: this component is migrated, just not for the vendor
         // currently active. It must be skipped (and warned about) rather than failing the boot.
         assertDoesNotThrow(() ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "h2", jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
 
         assertFalse(tableExists(jdbcUrl, "WIDGET"), "the mysql migration must not run against an h2 datasource");
         assertFalse(tableExists(jdbcUrl, "flyway_schema_history_example"),
@@ -113,10 +113,44 @@ public class FlywayStrategyTests {
         // ContainerException (checked) rather than RuntimeException, so ContainerLoader can turn it
         // into a StartupException and shut OFBiz down cleanly instead of dying mid-boot.
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().migrateComponent(componentRoot, "brokencomponent", "h2", jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "brokencomponent", "default", "h2", null, jdbcUrl, USER, PASSWORD));
 
         assertTrue(thrown.getMessage().contains("brokencomponent"),
                 "the failure must be attributed to the component that caused it, got: " + thrown.getMessage());
+    }
+
+    @Test
+    void migrateComponentRefusesToRunWhenTheSchemaHasDriftedSinceItsLastFingerprint(@TempDir Path tempDir) throws Exception {
+        Path componentRoot = componentRootWithMigration(tempDir, "h2",
+                "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
+        String jdbcUrl = jdbcUrl(tempDir, "driftblocked");
+
+        // Stand in for auto-DDL having already created this component's real "example" entity table
+        // before Flyway ever recorded a fingerprint for it: resolveComponentTableNames resolves
+        // "example" against the REAL entity model (EXAMPLE), not the temp-directory migration used
+        // for WIDGET above, so EXAMPLE must actually exist here for the later ALTER TABLE to have
+        // something to drift.
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, USER, PASSWORD);
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY)");
+        }
+
+        // First run: migrates cleanly and records a fingerprint.
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+        assertTrue(tableExists(jdbcUrl, "WIDGET"));
+
+        // Simulate drift: something outside Flyway (e.g. auto-DDL while this datasource was
+        // "auto-ddl") added a column to a table this component owns.
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, USER, PASSWORD);
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE EXAMPLE ADD COLUMN DRIFTED_FIELD VARCHAR(20)");
+        }
+
+        ContainerException thrown = assertThrows(ContainerException.class, () ->
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+
+        assertTrue(thrown.getMessage().contains("example"),
+                "the failure must be attributed to the component, got: " + thrown.getMessage());
     }
 
     @Test
@@ -127,7 +161,7 @@ public class FlywayStrategyTests {
         // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
         // (see MigrationSupportTests) - targeting an unrelated group name must skip it entirely.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz.olap", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
+                "org.apache.ofbiz.olap", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
         // A mock stands in for plugins/example's real ComponentConfig: getComponentName() must return
         // "example" (a real, resolvable component) so entity-group resolution reflects reality, but
         // rootLocation() is redirected to this test's temp directory so that, were the group filter to
@@ -152,7 +186,7 @@ public class FlywayStrategyTests {
         // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
         // (see MigrationSupportTests) - targeting that same group must actually run the migration.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
         ComponentConfig exampleComponent = mock(ComponentConfig.class);
         when(exampleComponent.getComponentName()).thenReturn("example");
         when(exampleComponent.rootLocation()).thenReturn(componentRoot);
@@ -168,7 +202,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "noentitygroups");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
         // "party" (applications/party) declares no <entity-resource type="model"> of its own, so
         // resolveComponentEntityGroups genuinely returns an empty set for it against the real, already
         // loaded config (see MigrationSupportTests) - a mock stands in only to redirect rootLocation()
@@ -183,6 +217,49 @@ public class FlywayStrategyTests {
 
         assertTrue(thrown.getMessage().contains("party"),
                 "the failure must name the component with unresolvable entity groups, got: " + thrown.getMessage());
+    }
+
+    @Test
+    void validateThrowsWhenAMigrationHasNeverBeenAppliedOnThisDatasource(@TempDir Path tempDir) throws Exception {
+        Path componentRoot = componentRootWithMigration(tempDir, "h2",
+                "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
+        String jdbcUrl = jdbcUrl(tempDir, "validatenever");
+        MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+        ComponentConfig exampleComponent = mock(ComponentConfig.class);
+        when(exampleComponent.getComponentName()).thenReturn("example");
+        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+
+        ContainerException thrown = assertThrows(ContainerException.class, () ->
+                new FlywayStrategy().validate("default", target, List.of(exampleComponent)));
+
+        assertTrue(thrown.getMessage().contains("example"));
+    }
+
+    @Test
+    void validatePassesWhenEverythingIsAlreadyMigratedAndUnchanged(@TempDir Path tempDir) throws Exception {
+        Path componentRoot = componentRootWithMigration(tempDir, "h2",
+                "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
+        String jdbcUrl = jdbcUrl(tempDir, "validateclean");
+        MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+        ComponentConfig exampleComponent = mock(ComponentConfig.class);
+        when(exampleComponent.getComponentName()).thenReturn("example");
+        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+
+        assertDoesNotThrow(() -> new FlywayStrategy().validate("default", target, List.of(exampleComponent)));
+    }
+
+    @Test
+    void validateComponentDoesNotThrowWhenTheComponentHasMigrationsOnlyForAnotherVendor(@TempDir Path tempDir) throws Exception {
+        Path componentRoot = componentRootWithMigration(tempDir, "mysql",
+                "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
+        String jdbcUrl = jdbcUrl(tempDir, "validatevendormismatch");
+
+        assertDoesNotThrow(() ->
+                new FlywayStrategy().validateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
     }
 
     private static Path componentRootWithMigration(Path tempDir, String vendor, String fileName, String sql) throws Exception {

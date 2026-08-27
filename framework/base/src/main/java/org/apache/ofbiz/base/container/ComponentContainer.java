@@ -59,11 +59,17 @@ public class ComponentContainer implements Container {
 
     /**
      * Loads components found in a directory.
+     *
+     * <p>Public so standalone entry points that need component/entity metadata without a full
+     * container boot (e.g. {@code org.apache.ofbiz.entity.migration.RunMigrations}) can bootstrap
+     * just this container directly, the same way
+     * {@code org.apache.ofbiz.base.container.ComponentContainerTestSupport} already does from
+     * test code across packages.</p>
      * @param name  the name of this container
      * @param ofbizHome  the directory where to search for components
      * @throws ContainerException when components are already loaded or when failing to load them.
      */
-    void init(String name, Path ofbizHome) throws ContainerException {
+    public void init(String name, Path ofbizHome) throws ContainerException {
         if (!loaded.compareAndSet(false, true)) {
             throw new ContainerException("Components already loaded, cannot start");
         }

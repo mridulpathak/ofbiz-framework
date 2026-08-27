@@ -18,20 +18,24 @@
  *******************************************************************************/
 package org.apache.ofbiz.entity.migration;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.apache.ofbiz.base.container.ContainerException;
 import org.junit.jupiter.api.Test;
 
 public class MigrationContainerTests {
 
     @Test
-    void resolveStrategyReturnsFlywayStrategyForExactMatch() {
+    void resolveStrategyReturnsFlywayStrategyForExactMatch() throws Exception {
         assertInstanceOf(FlywayStrategy.class, MigrationContainer.resolveStrategy("flyway"));
     }
 
     @Test
-    void resolveStrategyReturnsTheSameCachedInstanceForAutoDdl() {
+    void resolveStrategyReturnsTheSameCachedInstanceForAutoDdl() throws Exception {
         // start() relies on reference equality (== AUTO_DDL_STRATEGY) to skip credential resolution
         // for non-flyway datasources; this pins resolveStrategy to keep returning the cached singleton
         // rather than a fresh instance, which would silently make that == check always false.
@@ -39,17 +43,45 @@ public class MigrationContainerTests {
     }
 
     @Test
-    void resolveStrategyReturnsAutoDdlStrategyForAutoDdlValue() {
+    void resolveStrategyReturnsAutoDdlStrategyForAutoDdlValue() throws Exception {
         assertInstanceOf(AutoDdlStrategy.class, MigrationContainer.resolveStrategy("auto-ddl"));
     }
 
     @Test
-    void resolveStrategyReturnsAutoDdlStrategyForNullValue() {
+    void resolveStrategyReturnsAutoDdlStrategyForNullValue() throws Exception {
         assertInstanceOf(AutoDdlStrategy.class, MigrationContainer.resolveStrategy(null));
     }
 
     @Test
-    void resolveStrategyReturnsAutoDdlStrategyForUnrecognizedValue() {
-        assertInstanceOf(AutoDdlStrategy.class, MigrationContainer.resolveStrategy("something-else"));
+    void resolveStrategyRejectsAnUnrecognizedNonBlankValue() {
+        ContainerException thrown = assertThrows(ContainerException.class, () ->
+                MigrationContainer.resolveStrategy("something-else"));
+
+        assertTrue(thrown.getMessage().contains("something-else"),
+                "the failure must name the actual bad value, got: " + thrown.getMessage());
+    }
+
+    @Test
+    void resolveStrategyReturnsAutoDdlStrategyForABlankValue() throws Exception {
+        assertInstanceOf(AutoDdlStrategy.class, MigrationContainer.resolveStrategy(""));
+    }
+
+    @Test
+    void validateExecutionModeAcceptsEmbedded() {
+        assertDoesNotThrow(() -> MigrationContainer.validateExecutionMode("embedded"));
+    }
+
+    @Test
+    void validateExecutionModeAcceptsExternal() {
+        assertDoesNotThrow(() -> MigrationContainer.validateExecutionMode("external"));
+    }
+
+    @Test
+    void validateExecutionModeRejectsAnUnrecognizedValue() {
+        ContainerException thrown = assertThrows(ContainerException.class, () ->
+                MigrationContainer.validateExecutionMode("EXTERNAL"));
+
+        assertTrue(thrown.getMessage().contains("EXTERNAL"),
+                "the failure must name the actual bad value, got: " + thrown.getMessage());
     }
 }

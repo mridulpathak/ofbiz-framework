@@ -18,11 +18,15 @@
  *******************************************************************************/
 package org.apache.ofbiz.entity.migration;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class MigrationSupportTests {
 
@@ -35,5 +39,39 @@ public class MigrationSupportTests {
 
         assertTrue(groups.contains("org.apache.ofbiz"),
                 "plugins/example's entities should resolve to the default entity group, got: " + groups);
+    }
+
+    @Test
+    void migrationsDirectoryUsesTheColocatedDefaultWhenNoOverrideIsSet(@TempDir Path tempDir) {
+        Path componentRoot = tempDir.resolve("mycomponent");
+
+        Path result = MigrationSupport.migrationsDirectory(componentRoot, "mycomponent-without-override", "mysql");
+
+        assertEquals(componentRoot.resolve("migrations").resolve("mysql"), result);
+    }
+
+    @Test
+    void migrationsDirectoryUsesTheSystemPropertyOverrideWhenSet(@TempDir Path tempDir) {
+        Path componentRoot = tempDir.resolve("mycomponent");
+        Path externalRoot = tempDir.resolve("external-migrations-repo");
+        String propertyName = "ofbiz.migrations.location.overridetest";
+        System.setProperty(propertyName, externalRoot.toString());
+        try {
+            Path result = MigrationSupport.migrationsDirectory(componentRoot, "overridetest", "mysql");
+
+            assertEquals(externalRoot.resolve("mysql"), result);
+        } finally {
+            System.clearProperty(propertyName);
+        }
+    }
+
+    @Test
+    void bootstrapComponentsIfNeededDoesNotThrowWhenCalledRepeatedly() {
+        // In this test JVM, ComponentConfig is very likely already populated by an unrelated
+        // JUnit-wide bootstrap listener (see UelFunctionsBootstrapListener) — this exercises the
+        // no-op branch, proving the guard is safe to call unconditionally without duplicating or
+        // corrupting an already-loaded cache. RunMigrationsForkedJvmTests covers the from-empty case.
+        assertDoesNotThrow(MigrationSupport::bootstrapComponentsIfNeeded);
+        assertDoesNotThrow(MigrationSupport::bootstrapComponentsIfNeeded);
     }
 }

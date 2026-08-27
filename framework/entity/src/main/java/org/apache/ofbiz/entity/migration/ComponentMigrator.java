@@ -69,6 +69,11 @@ public final class ComponentMigrator {
         return new MigrateResult(flywayResult.migrationsExecuted);
     }
 
+    /** Reports whether this component has migration files that have not yet been applied. */
+    public boolean hasPendingMigrations() {
+        return flyway.info().pending().length > 0;
+    }
+
     /** Marks the schema-history table as already applied through {@code baselineVersion}, without running any SQL. */
     public void baseline(String baselineVersion, String baselineDescription) {
         baseConfiguration()

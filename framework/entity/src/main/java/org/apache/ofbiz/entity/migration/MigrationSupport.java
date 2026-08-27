@@ -29,6 +29,8 @@ import org.apache.ofbiz.base.component.ComponentConfig;
 import org.apache.ofbiz.base.component.ComponentLoaderConfig;
 import org.apache.ofbiz.base.config.GenericConfigException;
 import org.apache.ofbiz.base.config.ResourceHandler;
+import org.apache.ofbiz.base.container.ComponentContainer;
+import org.apache.ofbiz.base.container.ContainerException;
 import org.apache.ofbiz.base.util.Debug;
 import org.apache.ofbiz.entity.GenericEntityConfException;
 import org.apache.ofbiz.entity.GenericEntityException;
@@ -60,7 +62,7 @@ final class MigrationSupport {
      * migrations only run against the datasource(s) its own entities actually belong to).
      */
     record JdbcTarget(String groupName, String datasourceName, String vendor, String jdbcUrl, String jdbcUsername,
-            String jdbcPassword) { }
+            String jdbcPassword, String schemaName) { }
 
     /**
      * Resolves a single datasource into a migratable target.
@@ -82,7 +84,7 @@ final class MigrationSupport {
             return null;
         }
         return new JdbcTarget(groupName, datasourceName, datasource.getFieldTypeName(), jdbc.getJdbcUri(),
-                jdbc.getJdbcUsername(), EntityConfig.getJdbcPassword(jdbc));
+                jdbc.getJdbcUsername(), EntityConfig.getJdbcPassword(jdbc), datasource.getSchemaName());
     }
 
     /**
@@ -123,23 +125,46 @@ final class MigrationSupport {
         return "flyway_schema_history_" + componentName.replace('-', '_');
     }
 
+    private static final String MIGRATIONS_LOCATION_PROPERTY_PREFIX = "ofbiz.migrations.location.";
+
     /**
-     * Builds the vendor-specific migrations directory for a component.
+     * Resolves where a component's migrations actually live: an operator-configured external
+     * location (system property {@code ofbiz.migrations.location.<componentName>}, e.g. a
+     * separately-managed repository a DBA team controls), or the colocated
+     * {@code <componentRoot>/migrations} default.
      * @param componentRoot the component's root directory
-     * @param vendor the active datasource's {@code field-type-name}
-     * @return {@code <componentRoot>/migrations/<vendor>}
+     * @param componentName the OFBiz component name, used to look up the override property
+     * @return the migrations root for this component (not vendor-specific yet)
      */
-    static Path migrationsDirectory(Path componentRoot, String vendor) {
-        return componentRoot.resolve(MIGRATIONS_DIRECTORY_NAME).resolve(vendor);
+    private static Path migrationsRoot(Path componentRoot, String componentName) {
+        String override = System.getProperty(MIGRATIONS_LOCATION_PROPERTY_PREFIX + componentName);
+        if (override != null && !override.isBlank()) {
+            return Paths.get(override);
+        }
+        return componentRoot.resolve(MIGRATIONS_DIRECTORY_NAME);
     }
 
     /**
-     * Reports whether a component ships any migrations at all, for any vendor.
+     * Builds the vendor-specific migrations directory for a component, honoring any configured
+     * external-location override.
      * @param componentRoot the component's root directory
-     * @return {@code true} if {@code <componentRoot>/migrations} exists as a directory
+     * @param componentName the OFBiz component name, used to look up any location override
+     * @param vendor the active datasource's {@code field-type-name}
+     * @return the resolved {@code migrations/<vendor>} directory, wherever its root actually lives
      */
-    static boolean hasAnyMigrationsDirectory(Path componentRoot) {
-        return Files.isDirectory(componentRoot.resolve(MIGRATIONS_DIRECTORY_NAME));
+    static Path migrationsDirectory(Path componentRoot, String componentName, String vendor) {
+        return migrationsRoot(componentRoot, componentName).resolve(vendor);
+    }
+
+    /**
+     * Reports whether a component ships any migrations at all, for any vendor, honoring any
+     * configured external-location override.
+     * @param componentRoot the component's root directory
+     * @param componentName the OFBiz component name, used to look up any location override
+     * @return {@code true} if the resolved migrations root exists as a directory
+     */
+    static boolean hasAnyMigrationsDirectory(Path componentRoot, String componentName) {
+        return Files.isDirectory(migrationsRoot(componentRoot, componentName));
     }
 
     /**
@@ -154,7 +179,7 @@ final class MigrationSupport {
         if (Boolean.TRUE.equals(ComponentConfig.componentExists(componentName))) {
             return ComponentConfig.getComponentConfig(componentName).rootLocation();
         }
-        Path ofbizHome = Paths.get(System.getProperty("ofbiz.home", ".")).toAbsolutePath().normalize();
+        Path ofbizHome = resolveOfbizHome();
         for (ComponentLoaderConfig.ComponentDef def : ComponentLoaderConfig.getRootComponents()) {
             Path location = def.getLocation().isAbsolute() ? def.getLocation() : ofbizHome.resolve(def.getLocation());
             Path candidate = def.getType() == ComponentLoaderConfig.ComponentType.SINGLE_COMPONENT
@@ -167,5 +192,29 @@ final class MigrationSupport {
         }
         throw new GenericConfigException("No component named '" + componentName + "' found under " + ofbizHome
                 + "; check the name and that -Dofbiz.home points at your OFBiz installation");
+    }
+
+    private static Path resolveOfbizHome() {
+        return Paths.get(System.getProperty("ofbiz.home", ".")).toAbsolutePath().normalize();
+    }
+
+    /**
+     * Populates {@link ComponentConfig}'s component cache when running outside a booted OFBiz
+     * container — the standalone CLI case ({@link RunMigrations}, {@link BaselineComponentMigration}).
+     * A no-op if components are already loaded (a real container boot, or a test JVM that has
+     * already bootstrapped them some other way), so this is always safe to call unconditionally at
+     * the very start of a standalone entry point's {@code main()}, before touching any other Entity
+     * Engine configuration.
+     * @throws GenericConfigException if component loading fails
+     */
+    static void bootstrapComponentsIfNeeded() throws GenericConfigException {
+        if (!ComponentConfig.getAllComponents().isEmpty()) {
+            return;
+        }
+        try {
+            new ComponentContainer().init("migration-cli", resolveOfbizHome());
+        } catch (ContainerException e) {
+            throw new GenericConfigException("Could not load components for a standalone migration CLI", e);
+        }
     }
 }

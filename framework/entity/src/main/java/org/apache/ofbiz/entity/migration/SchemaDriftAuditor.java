@@ -48,8 +48,8 @@ public final class SchemaDriftAuditor {
         List<DriftFinding> findings = new ArrayList<>();
         for (String tableName : tableNames) {
             try {
-                Set<String> liveColumns = columnNames(liveSchema, tableName);
-                Set<String> referenceColumns = columnNames(referenceSchema, tableName);
+                Set<String> liveColumns = SchemaDriftAuditor.columnNames(liveSchema, tableName);
+                Set<String> referenceColumns = SchemaDriftAuditor.columnNames(referenceSchema, tableName);
 
                 Set<String> missingFromLive = new LinkedHashSet<>(referenceColumns);
                 missingFromLive.removeAll(liveColumns);
@@ -71,10 +71,22 @@ public final class SchemaDriftAuditor {
         return findings;
     }
 
-    private Set<String> columnNames(Connection conn, String tableName) throws SQLException {
+    static Set<String> columnNames(Connection conn, String tableName) throws SQLException {
+        return columnNames(conn, null, tableName);
+    }
+
+    /**
+     * Same as {@link #columnNames(Connection, String)}, but scoped to a specific schema — for
+     * callers that know the configured schema and need to avoid folding together a same-named
+     * table that legitimately exists in a different schema (e.g. OFBiz's per-tenant schemas).
+     * @param schemaName the schema to scope the lookup to, or {@code null}/blank for the
+     *      connection's default (unscoped) behavior
+     */
+    static Set<String> columnNames(Connection conn, String schemaName, String tableName) throws SQLException {
         Set<String> columns = new LinkedHashSet<>();
         DatabaseMetaData metaData = conn.getMetaData();
-        try (ResultSet rs = metaData.getColumns(null, null, tableName, null)) {
+        String schemaPattern = schemaName == null || schemaName.isBlank() ? null : schemaName;
+        try (ResultSet rs = metaData.getColumns(null, schemaPattern, tableName, null)) {
             while (rs.next()) {
                 columns.add(rs.getString("COLUMN_NAME").toUpperCase());
             }

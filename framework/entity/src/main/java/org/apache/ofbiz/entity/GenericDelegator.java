@@ -282,12 +282,17 @@ public class GenericDelegator implements Delegator {
 
             try {
                 Datasource datasource = EntityConfig.getDatasource(helperBaseName);
-                if (datasource.getCheckOnStart()) {
+                boolean flywayManaged = "flyway".equals(datasource.getSchemaManagementStrategy());
+                if (datasource.getCheckOnStart() && !flywayManaged) {
                     if (Debug.infoOn()) {
                         Debug.logInfo("Doing database check as requested in entityengine.xml with addMissing="
                                 + datasource.getAddMissingOnStart(), MODULE);
                     }
                     helper.checkDataSource(this.getModelEntityMapByGroup(groupName), null, datasource.getAddMissingOnStart());
+                } else if (datasource.getCheckOnStart() && flywayManaged && Debug.infoOn()) {
+                    Debug.logInfo("Skipping Entity Engine auto-DDL check for datasource '" + helperBaseName
+                            + "': schema-management-strategy is 'flyway' - Flyway migrations are the sole source of "
+                            + "schema changes for this datasource", MODULE);
                 }
             } catch (GenericEntityException e) {
                 Debug.logWarning(e, e.getMessage(), MODULE);

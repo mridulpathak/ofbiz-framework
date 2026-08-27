@@ -20,6 +20,9 @@ package org.apache.ofbiz.entity.migration;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Set;
 
 import org.apache.ofbiz.base.util.Debug;
@@ -70,6 +73,8 @@ public final class BaselineComponentMigration {
                 + " running them. Only do this after a SchemaDriftAuditor run has confirmed the live schema already"
                 + " matches this baseline.", MODULE);
 
+        MigrationSupport.bootstrapComponentsIfNeeded();
+
         Path componentRoot = MigrationSupport.resolveComponentRoot(componentName);
         String historyTable = MigrationSupport.historyTableName(componentName);
 
@@ -83,7 +88,7 @@ public final class BaselineComponentMigration {
             return;
         }
         componentGroups.remove(null);
-        if (componentGroups.isEmpty() && MigrationSupport.hasAnyMigrationsDirectory(componentRoot)) {
+        if (componentGroups.isEmpty() && MigrationSupport.hasAnyMigrationsDirectory(componentRoot, componentName)) {
             Debug.logError("[baselineMigration] Component '" + componentName + "' ships migrations but no entity group"
                     + " could be resolved for it (it declares no <entity-resource type=\"model\">); refusing to baseline"
                     + " it blindly", MODULE);
@@ -118,7 +123,7 @@ public final class BaselineComponentMigration {
             if (target == null) {
                 continue;
             }
-            Path migrationsDir = MigrationSupport.migrationsDirectory(componentRoot, target.vendor());
+            Path migrationsDir = MigrationSupport.migrationsDirectory(componentRoot, componentName, target.vendor());
             if (!Files.isDirectory(migrationsDir)) {
                 Debug.logInfo("[baselineMigration] Skipping datasource '" + target.datasourceName() + "': component '"
                         + componentName + "' has no migrations for vendor '" + target.vendor() + "' (" + migrationsDir + ")", MODULE);
@@ -129,6 +134,16 @@ public final class BaselineComponentMigration {
                     + historyTable + ")", MODULE);
             new ComponentMigrator(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword(), migrationsDir, historyTable)
                     .baseline(baselineVersion, baselineDescription);
+            try (Connection conn = DriverManager.getConnection(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword())) {
+                Set<String> tableNames = SchemaFingerprint.resolveComponentTableNames(delegatorName, componentName);
+                SchemaFingerprint.store(conn, componentName, SchemaFingerprint.compute(conn, target.schemaName(), tableNames));
+            } catch (SQLException | GenericEntityException e) {
+                Debug.logError(e, "[baselineMigration] Baselined component '" + componentName
+                        + "' but could not record its schema fingerprint - the next migrate() attempt will not be able"
+                        + " to detect drift until this is resolved", MODULE);
+                System.exit(1);
+                return;
+            }
             baselined++;
         }
 

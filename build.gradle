@@ -807,11 +807,29 @@ task baselineMigration(group: ofbizServer, dependsOn: classes) {
             classpath = sourceSets.main.runtimeClasspath
             mainClass = 'org.apache.ofbiz.entity.migration.BaselineComponentMigration'
             systemProperty 'ofbiz.home', rootDir.absolutePath
+            systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('ofbiz.migrations.location.') }
             args = [
                 (project.findProperty('delegatorName') ?: 'default').toString(),
                 project.findProperty('component').toString(),
                 project.findProperty('baselineVersion').toString(),
                 (project.findProperty('baselineDescription') ?: 'baseline').toString(),
+            ]
+        }
+    }
+}
+
+task runMigrations(group: ofbizServer, dependsOn: classes) {
+    description = 'Run every Flyway-managed component\'s pending migrations for a delegator, outside the ' +
+            'application\'s boot sequence - for execution-mode=external deployments. ' +
+            'Usage: ./gradlew runMigrations [-PdelegatorName=default]'
+    doLast {
+        javaexec {
+            classpath = sourceSets.main.runtimeClasspath
+            mainClass = 'org.apache.ofbiz.entity.migration.RunMigrations'
+            systemProperty 'ofbiz.home', rootDir.absolutePath
+            systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('ofbiz.migrations.location.') }
+            args = [
+                (project.findProperty('delegatorName') ?: 'default').toString(),
             ]
         }
     }

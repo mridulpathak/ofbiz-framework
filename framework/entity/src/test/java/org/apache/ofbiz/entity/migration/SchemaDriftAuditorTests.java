@@ -19,14 +19,18 @@
 package org.apache.ofbiz.entity.migration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class SchemaDriftAuditorTests {
 
@@ -79,6 +83,25 @@ public class SchemaDriftAuditorTests {
             assertEquals("WIDGET", findings.get(0).tableName());
             assertTrue(findings.get(0).description().contains("WIDGET_EXTRA"),
                     "finding should mention the extra column: " + findings.get(0).description());
+        }
+    }
+
+    @Test
+    void columnNamesOnlySeesTheConfiguredSchemaWhenAnotherSchemaHasATableWithTheSameName(@TempDir Path tempDir) throws Exception {
+        String jdbcUrl = "jdbc:h2:mem:" + tempDir.getFileName() + "schemaqualified;DB_CLOSE_DELAY=-1";
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE SCHEMA TENANT1");
+            stmt.execute("CREATE TABLE PUBLIC.EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY)");
+            stmt.execute("CREATE TABLE TENANT1.EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY, TENANT_FIELD VARCHAR(20))");
+
+            Set<String> publicColumns = SchemaDriftAuditor.columnNames(conn, "PUBLIC", "EXAMPLE");
+            Set<String> tenantColumns = SchemaDriftAuditor.columnNames(conn, "TENANT1", "EXAMPLE");
+
+            assertFalse(publicColumns.contains("TENANT_FIELD"),
+                    "PUBLIC.EXAMPLE must not pick up TENANT1.EXAMPLE's column, got: " + publicColumns);
+            assertTrue(tenantColumns.contains("TENANT_FIELD"),
+                    "TENANT1.EXAMPLE should see its own column, got: " + tenantColumns);
         }
     }
 

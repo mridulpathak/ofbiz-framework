@@ -19,6 +19,7 @@
 package org.apache.ofbiz.entity.migration;
 
 import java.util.List;
+import java.util.Set;
 
 import org.apache.ofbiz.base.component.ComponentConfig;
 import org.apache.ofbiz.base.container.Container;
@@ -40,15 +41,19 @@ public class MigrationContainer implements Container {
 
     private static final SchemaManagementStrategy AUTO_DDL_STRATEGY = new AutoDdlStrategy();
     private static final SchemaManagementStrategy FLYWAY_STRATEGY = new FlywayStrategy();
+    private static final Set<String> VALID_EXECUTION_MODES = Set.of("embedded", "external");
 
     private String name;
     private String delegatorName;
+    private String executionMode;
 
     @Override
     public void init(List<StartupCommand> ofbizCommands, String name, String configFile) throws ContainerException {
         this.name = name;
         ContainerConfig.Configuration cc = ContainerConfig.getConfiguration(name);
         this.delegatorName = ContainerConfig.getPropertyValue(cc, "delegator-name", "default");
+        this.executionMode = ContainerConfig.getPropertyValue(cc, "execution-mode", "embedded");
+        validateExecutionMode(this.executionMode);
     }
 
     @Override
@@ -74,7 +79,12 @@ public class MigrationContainer implements Container {
                 if (target == null) {
                     continue;
                 }
-                strategy.apply(delegatorName, target, components);
+                if ("external".equals(executionMode)) {
+                    FlywayStrategy flywayStrategy = (FlywayStrategy) strategy;
+                    flywayStrategy.validate(delegatorName, target, components);
+                } else {
+                    strategy.apply(delegatorName, target, components);
+                }
             }
             return true;
         } catch (GenericEntityConfException e) {
@@ -82,11 +92,23 @@ public class MigrationContainer implements Container {
         }
     }
 
-    static SchemaManagementStrategy resolveStrategy(String schemaManagementStrategyValue) {
+    static SchemaManagementStrategy resolveStrategy(String schemaManagementStrategyValue) throws ContainerException {
+        if (schemaManagementStrategyValue == null || schemaManagementStrategyValue.isBlank()
+                || "auto-ddl".equals(schemaManagementStrategyValue)) {
+            return AUTO_DDL_STRATEGY;
+        }
         if ("flyway".equals(schemaManagementStrategyValue)) {
             return FLYWAY_STRATEGY;
         }
-        return AUTO_DDL_STRATEGY;
+        throw new ContainerException("Invalid schema-management-strategy '" + schemaManagementStrategyValue
+                + "' - must be 'auto-ddl' (or omitted) or 'flyway' (check the relevant <datasource> in entityengine.xml)");
+    }
+
+    static void validateExecutionMode(String executionMode) throws ContainerException {
+        if (!VALID_EXECUTION_MODES.contains(executionMode)) {
+            throw new ContainerException("Invalid execution-mode '" + executionMode + "' - must be one of "
+                    + VALID_EXECUTION_MODES + " (check the migration-container's configuration in ofbiz-component.xml)");
+        }
     }
 
     @Override

@@ -34,6 +34,7 @@ under the License.
    
     <container name="migration-container" loaders="main" class="org.apache.ofbiz.entity.migration.MigrationContainer">
         <property name="delegator-name" value="default"/>
+        <property name="execution-mode" value="embedded"/>
     </container>
     <container name="delegator-container" loaders="main" class="org.apache.ofbiz.entity.DelegatorContainer">
         <property name="preload-delegators" value="default"/>

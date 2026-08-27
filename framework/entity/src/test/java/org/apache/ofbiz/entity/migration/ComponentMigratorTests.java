@@ -19,6 +19,7 @@
 package org.apache.ofbiz.entity.migration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -107,6 +108,23 @@ public class ComponentMigratorTests {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1), "WIDGET table should exist after migrate() runs V1");
         }
+    }
+
+    @Test
+    void hasPendingMigrationsIsTrueBeforeMigrateAndFalseAfter(@TempDir Path tempDir) throws Exception {
+        Path migrationsDir = tempDir.resolve("migrations");
+        Files.createDirectories(migrationsDir);
+        Files.writeString(migrationsDir.resolve("V1__create_widget.sql"),
+                "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
+
+        String jdbcUrl = "jdbc:h2:mem:" + tempDir.getFileName() + "pending;DB_CLOSE_DELAY=-1";
+        ComponentMigrator migrator = new ComponentMigrator(jdbcUrl, "sa", "", migrationsDir, "flyway_schema_history_pendingtest");
+
+        assertTrue(migrator.hasPendingMigrations(), "V1 has not run yet");
+
+        migrator.migrate();
+
+        assertFalse(migrator.hasPendingMigrations(), "V1 has now run");
     }
 
     @Test
