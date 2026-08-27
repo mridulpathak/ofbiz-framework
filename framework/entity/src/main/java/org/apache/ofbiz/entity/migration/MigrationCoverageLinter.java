@@ -26,10 +26,12 @@ import java.util.regex.Pattern;
 /**
  * Two independent pure rules guarding Flyway migration hygiene in a change set.
  *
- * <p>{@link #findViolations}: a change that touches an {@code entitydef/entitymodel*.xml} file inside a
- * component that already has {@code migrations/} coverage must also add a new file under that
- * component's {@code migrations/} tree. Prevents silent Entity-Engine/Flyway drift during the
- * transition window before a datasource's auto-DDL can be fully switched off.</p>
+ * <p>{@link #findViolations}: a change that touches one of a component's entity-model files under
+ * {@code entitydef/} — either the canonical {@code entitymodel*.xml} naming, or the
+ * {@code <domain>-entitymodel.xml} naming {@code applications/datamodel} uses to centralize other
+ * components' models — inside a component that already has {@code migrations/} coverage must also add
+ * a new file under that component's {@code migrations/} tree. Prevents silent Entity-Engine/Flyway
+ * drift during the transition window before a datasource's auto-DDL can be fully switched off.</p>
  *
  * <p>{@link #findChangedMigrationViolations}: an already-committed migration file must never be
  * touched again — modified, renamed or deleted. Flyway stores the version, description and checksum
@@ -56,8 +58,8 @@ public final class MigrationCoverageLinter {
             boolean newMigrationFileIncluded = changedFilePaths.stream()
                     .anyMatch(path -> path.startsWith(componentRoot + "/migrations/"));
             if (!newMigrationFileIncluded) {
-                violations.add(componentRoot + ": entitydef/entitymodel*.xml changed but no new file was added under "
-                        + componentRoot + "/migrations/ — add a migration for this change, "
+                violations.add(componentRoot + ": an entity-model file under entitydef/ changed but no new file was "
+                        + "added under " + componentRoot + "/migrations/ — add a migration for this change, "
                         + "or Entity Engine auto-DDL and Flyway history will silently diverge.");
             }
         }
@@ -105,12 +107,24 @@ public final class MigrationCoverageLinter {
     /**
      * Recognises any of a component's entity-model definition files, since real OFBiz components split
      * their model across several ({@code entitymodel.xml}, {@code entitymodel_view.xml}, ...).
+     * Handles two naming conventions: files that start with {@code entitymodel} (e.g.
+     * {@code entitymodel.xml}, {@code entitymodel_view.xml}) and files that end with
+     * {@code -entitymodel.xml} (e.g. {@code party-entitymodel.xml}, {@code order-entitymodel.xml}).
      * @param path a change-set path, using {@code /} separators, relative to the repository root
      * @param componentRoot the component's root path, e.g. {@code applications/party}
-     * @return {@code true} if {@code path} is an {@code entitydef/entitymodel*.xml} file of that component
+     * @return {@code true} if {@code path} is an entity-model file directly under {@code entitydef/} of that component
      */
     private static boolean isEntityModelFile(String path, String componentRoot) {
-        String prefix = componentRoot + "/entitydef/entitymodel";
-        return path.startsWith(prefix) && path.endsWith(".xml") && !path.substring(prefix.length()).contains("/");
+        String entitydefPrefix = componentRoot + "/entitydef/";
+        if (!path.startsWith(entitydefPrefix) || !path.endsWith(".xml")) {
+            return false;
+        }
+        String filename = path.substring(entitydefPrefix.length());
+        // Must not have subdirectories
+        if (filename.contains("/")) {
+            return false;
+        }
+        // Recognise both naming conventions: starts with 'entitymodel' or ends with '-entitymodel.xml'
+        return filename.startsWith("entitymodel") || filename.endsWith("-entitymodel.xml");
     }
 }

@@ -74,6 +74,17 @@ public class MigrationCoverageLinterTests {
     }
 
     @Test
+    void flagsChangeToADatamodelStyleEntityModelFile() {
+        List<String> changedFiles = List.of("applications/datamodel/entitydef/party-entitymodel.xml");
+        Set<String> migratedComponents = Set.of("applications/datamodel");
+
+        List<String> violations = MigrationCoverageLinter.findViolations(changedFiles, migratedComponents);
+
+        assertEquals(1, violations.size(), "datamodel component uses <domain>-entitymodel.xml naming");
+        assertTrue(violations.get(0).contains("applications/datamodel"));
+    }
+
+    @Test
     void addingANewMigrationFileIsNotAChangedMigrationViolation() {
         // A change set that ADDS a migration alongside an entity-model change: the added migration
         // shows up in the changed-files list but not in the non-additive list, so neither rule fires.
