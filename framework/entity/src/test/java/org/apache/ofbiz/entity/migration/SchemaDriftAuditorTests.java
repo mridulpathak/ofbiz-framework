@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -87,7 +88,7 @@ public class SchemaDriftAuditorTests {
     }
 
     @Test
-    void columnNamesOnlySeesTheConfiguredSchemaWhenAnotherSchemaHasATableWithTheSameName(@TempDir Path tempDir) throws Exception {
+    void columnsBySchemaOnlySeesTheConfiguredSchemaWhenAnotherSchemaHasATableWithTheSameName(@TempDir Path tempDir) throws Exception {
         String jdbcUrl = "jdbc:h2:mem:" + tempDir.getFileName() + "schemaqualified;DB_CLOSE_DELAY=-1";
         try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "");
                 Statement stmt = conn.createStatement()) {
@@ -95,8 +96,13 @@ public class SchemaDriftAuditorTests {
             stmt.execute("CREATE TABLE PUBLIC.EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY)");
             stmt.execute("CREATE TABLE TENANT1.EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY, TENANT_FIELD VARCHAR(20))");
 
-            Set<String> publicColumns = SchemaDriftAuditor.columnNames(conn, "PUBLIC", "EXAMPLE");
-            Set<String> tenantColumns = SchemaDriftAuditor.columnNames(conn, "TENANT1", "EXAMPLE");
+            Map<String, Set<String>> publicColumnsBySchema = SchemaDriftAuditor.columnsBySchema(conn, "PUBLIC");
+            Map<String, Set<String>> tenantColumnsBySchema = SchemaDriftAuditor.columnsBySchema(conn, "TENANT1");
+            String publicKey = SchemaDriftAuditor.normalizedTableName(conn, "EXAMPLE");
+            String tenantKey = SchemaDriftAuditor.normalizedTableName(conn, "EXAMPLE");
+
+            Set<String> publicColumns = publicColumnsBySchema.get(publicKey);
+            Set<String> tenantColumns = tenantColumnsBySchema.get(tenantKey);
 
             assertFalse(publicColumns.contains("TENANT_FIELD"),
                     "PUBLIC.EXAMPLE must not pick up TENANT1.EXAMPLE's column, got: " + publicColumns);

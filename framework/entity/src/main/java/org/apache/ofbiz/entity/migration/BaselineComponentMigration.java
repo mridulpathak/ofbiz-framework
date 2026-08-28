@@ -135,8 +135,9 @@ public final class BaselineComponentMigration {
             new ComponentMigrator(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword(), migrationsDir, historyTable)
                     .baseline(baselineVersion, baselineDescription);
             try (Connection conn = DriverManager.getConnection(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword())) {
+                String schemaName = MigrationSupport.resolveSchemaName(target, conn);
                 Set<String> tableNames = SchemaFingerprint.resolveComponentTableNames(delegatorName, componentName);
-                SchemaFingerprint.store(conn, componentName, SchemaFingerprint.compute(conn, target.schemaName(), tableNames));
+                SchemaFingerprint.store(conn, componentName, SchemaFingerprint.compute(conn, schemaName, tableNames));
             } catch (SQLException | GenericEntityException e) {
                 Debug.logError(e, "[baselineMigration] Baselined component '" + componentName
                         + "' but could not record its schema fingerprint - the next migrate() attempt will not be able"

@@ -33,9 +33,12 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.ofbiz.base.component.ComponentConfig;
 import org.apache.ofbiz.base.container.ContainerException;
+import org.apache.ofbiz.entity.model.ModelEntity;
+import org.apache.ofbiz.entity.model.ModelReader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,7 +58,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "vendorhit");
 
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl));
 
         assertTrue(tableExists(jdbcUrl, "WIDGET"), "V1 should have run for the active vendor");
         assertEquals(1, historyRowCount(jdbcUrl, "flyway_schema_history_example"),
@@ -68,7 +71,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "hyphens");
 
-        new FlywayStrategy().migrateComponent(componentRoot, "my-plugin", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "my-plugin", "default", target("h2", jdbcUrl));
 
         assertEquals(1, historyRowCount(jdbcUrl, "flyway_schema_history_my_plugin"));
     }
@@ -79,7 +82,7 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "nomigrations");
 
         assertDoesNotThrow(() ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl)));
 
         assertFalse(tableExists(jdbcUrl, "WIDGET"));
         // Flyway creates its history table with the exact (quoted, lowercase) name it was given -
@@ -97,7 +100,7 @@ public class FlywayStrategyTests {
         // The dangerous-but-not-fatal case: this component is migrated, just not for the vendor
         // currently active. It must be skipped (and warned about) rather than failing the boot.
         assertDoesNotThrow(() ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl)));
 
         assertFalse(tableExists(jdbcUrl, "WIDGET"), "the mysql migration must not run against an h2 datasource");
         assertFalse(tableExists(jdbcUrl, "flyway_schema_history_example"),
@@ -113,7 +116,7 @@ public class FlywayStrategyTests {
         // ContainerException (checked) rather than RuntimeException, so ContainerLoader can turn it
         // into a StartupException and shut OFBiz down cleanly instead of dying mid-boot.
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().migrateComponent(componentRoot, "brokencomponent", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "brokencomponent", "default", target("h2", jdbcUrl)));
 
         assertTrue(thrown.getMessage().contains("brokencomponent"),
                 "the failure must be attributed to the component that caused it, got: " + thrown.getMessage());
@@ -136,7 +139,7 @@ public class FlywayStrategyTests {
         }
 
         // First run: migrates cleanly and records a fingerprint.
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl));
         assertTrue(tableExists(jdbcUrl, "WIDGET"));
 
         // Simulate drift: something outside Flyway (e.g. auto-DDL while this datasource was
@@ -147,7 +150,7 @@ public class FlywayStrategyTests {
         }
 
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl)));
 
         assertTrue(thrown.getMessage().contains("example"),
                 "the failure must be attributed to the component, got: " + thrown.getMessage());
@@ -161,7 +164,7 @@ public class FlywayStrategyTests {
         // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
         // (see MigrationSupportTests) - targeting an unrelated group name must skip it entirely.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz.olap", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+                "org.apache.ofbiz.olap", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
         // A mock stands in for plugins/example's real ComponentConfig: getComponentName() must return
         // "example" (a real, resolvable component) so entity-group resolution reflects reality, but
         // rootLocation() is redirected to this test's temp directory so that, were the group filter to
@@ -186,7 +189,7 @@ public class FlywayStrategyTests {
         // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
         // (see MigrationSupportTests) - targeting that same group must actually run the migration.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
         ComponentConfig exampleComponent = mock(ComponentConfig.class);
         when(exampleComponent.getComponentName()).thenReturn("example");
         when(exampleComponent.rootLocation()).thenReturn(componentRoot);
@@ -202,7 +205,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "noentitygroups");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
         // "party" (applications/party) declares no <entity-resource type="model"> of its own, so
         // resolveComponentEntityGroups genuinely returns an empty set for it against the real, already
         // loaded config (see MigrationSupportTests) - a mock stands in only to redirect rootLocation()
@@ -225,7 +228,7 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "validatenever");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
         ComponentConfig exampleComponent = mock(ComponentConfig.class);
         when(exampleComponent.getComponentName()).thenReturn("example");
         when(exampleComponent.rootLocation()).thenReturn(componentRoot);
@@ -242,12 +245,12 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "validateclean");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
-                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD, null);
+                "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
         ComponentConfig exampleComponent = mock(ComponentConfig.class);
         when(exampleComponent.getComponentName()).thenReturn("example");
         when(exampleComponent.rootLocation()).thenReturn(componentRoot);
 
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD);
+        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl));
 
         assertDoesNotThrow(() -> new FlywayStrategy().validate("default", target, List.of(exampleComponent)));
     }
@@ -259,7 +262,57 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "validatevendormismatch");
 
         assertDoesNotThrow(() ->
-                new FlywayStrategy().validateComponent(componentRoot, "example", "default", "h2", null, jdbcUrl, USER, PASSWORD));
+                new FlywayStrategy().validateComponent(componentRoot, "example", "default", target("h2", jdbcUrl)));
+    }
+
+    @Test
+    void entitiesNotManagedByThisStrategyExcludesEntitiesOwnedByAComponentWithMigrationsForTheVendor() throws Exception {
+        // "Example" is plugins/example's own entity, and plugins/example genuinely has migrations
+        // for "h2" (see componentRootWithMigration usage elsewhere in this file) once its migrations
+        // directory is on the configured location for it - but this test targets the REAL
+        // plugins/example root (no override), which has no migrations/h2 directory today, so this
+        // exercises the "not covered" branch for a real entity/component pairing without needing
+        // any filesystem setup: a real component with no migrations, feeding a real entity's
+        // ModelEntity, must come back in the "not managed" (uncovered) result.
+        ModelReader modelReader = ModelReader.getModelReader("default");
+        ModelEntity exampleEntity = modelReader.getModelEntity("Example");
+        Map<String, ModelEntity> entities = Map.of("Example", exampleEntity);
+
+        Map<String, ModelEntity> notManaged = new FlywayStrategy().entitiesNotManagedByThisStrategy(entities, "h2");
+
+        assertEquals(entities, notManaged, "a real component with no migrations for this vendor must be left for auto-DDL");
+    }
+
+    @Test
+    void entitiesNotManagedByThisStrategyExcludesAnEntityWhoseComponentHasMigrationsForTheActiveVendor(@TempDir Path tempDir)
+            throws Exception {
+        String propertyName = "ofbiz.migrations.location.example";
+        Path migrationsDir = tempDir.resolve("overridden-migrations");
+        Files.createDirectories(migrationsDir.resolve("h2"));
+        System.setProperty(propertyName, migrationsDir.toString());
+        try {
+            ModelReader modelReader = ModelReader.getModelReader("default");
+            ModelEntity exampleEntity = modelReader.getModelEntity("Example");
+            Map<String, ModelEntity> entities = Map.of("Example", exampleEntity);
+
+            Map<String, ModelEntity> notManaged = new FlywayStrategy().entitiesNotManagedByThisStrategy(entities, "h2");
+
+            assertTrue(notManaged.isEmpty(),
+                    "a component with real migrations for the active vendor must be fully covered, got: " + notManaged);
+        } finally {
+            System.clearProperty(propertyName);
+        }
+    }
+
+    @Test
+    void entitiesNotManagedByThisStrategyLeavesAnEntityWithNoResolvableComponentUncovered() {
+        ModelEntity noComponentEntity = new ModelEntity();
+        noComponentEntity.setEntityName("NotOwnedByAnyComponent");
+        Map<String, ModelEntity> entities = Map.of("NotOwnedByAnyComponent", noComponentEntity);
+
+        Map<String, ModelEntity> notManaged = new FlywayStrategy().entitiesNotManagedByThisStrategy(entities, "h2");
+
+        assertEquals(entities, notManaged, "an entity with no resolvable owning component must be left for auto-DDL");
     }
 
     private static Path componentRootWithMigration(Path tempDir, String vendor, String fileName, String sql) throws Exception {
@@ -271,6 +324,10 @@ public class FlywayStrategyTests {
 
     private static String jdbcUrl(Path tempDir, String suffix) {
         return "jdbc:h2:mem:migcontainer" + tempDir.getFileName() + suffix + ";DB_CLOSE_DELAY=-1";
+    }
+
+    private static MigrationSupport.JdbcTarget target(String vendor, String jdbcUrl) {
+        return new MigrationSupport.JdbcTarget("irrelevant-group", "irrelevant-datasource", vendor, jdbcUrl, USER, PASSWORD);
     }
 
     // Callers must pass the table's exact case: unquoted DDL (e.g. "WIDGET") is uppercased by H2, but

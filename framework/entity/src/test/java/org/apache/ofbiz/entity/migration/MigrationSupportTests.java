@@ -20,15 +20,32 @@ package org.apache.ofbiz.entity.migration;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 public class MigrationSupportTests {
+
+    @Test
+    void resolveSchemaNameReturnsNullWhenTheTargetsDatasourceIsNotARealConfiguredDatasource(@TempDir Path tempDir) throws Exception {
+        // A JdbcTarget built with a placeholder datasourceName that isn't in entityengine.xml (the
+        // common pattern in this package's own tests) must not blow up - there is no real Datasource
+        // config to resolve a schema against, so the safe, correct answer is "unscoped".
+        String jdbcUrl = "jdbc:h2:mem:" + tempDir.getFileName() + "resolveschemaname;DB_CLOSE_DELAY=-1";
+        MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
+                "irrelevant-group", "not-a-real-datasource", "h2", jdbcUrl, "sa", "");
+
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "")) {
+            assertNull(MigrationSupport.resolveSchemaName(target, conn));
+        }
+    }
 
     @Test
     void resolveComponentEntityGroupsFindsTheDefaultGroupForARealComponent() throws Exception {

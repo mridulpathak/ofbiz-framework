@@ -249,6 +249,23 @@ public class DatabaseUtil {
     }
 
     /**
+     * Same as {@link #checkDb(Map, List, boolean)}, but with a separate map used ONLY to resolve
+     * {@code type="one"} relation targets; see {@link #checkDb(Map, Map, List, List, boolean,
+     * boolean, boolean, boolean)} for details.
+     * @param modelEntities      the model entities
+     * @param referenceEntities  the complete set of entities relation targets may be resolved
+     *      against, or {@code null} to resolve relation targets against {@code modelEntities} only
+     * @param messages           the messages
+     * @param addMissing         the add missing
+     */
+    public void checkDb(Map<String, ModelEntity> modelEntities, Map<String, ModelEntity> referenceEntities, List<String> messages,
+                        boolean addMissing) {
+        checkDb(modelEntities, referenceEntities, null, messages, datasourceInfo.getCheckPksOnStart(), (
+                datasourceInfo.getUseForeignKeys() && datasourceInfo.getCheckFksOnStart()), (
+                        datasourceInfo.getUseForeignKeyIndices() && datasourceInfo.getCheckFkIndicesOnStart()), addMissing);
+    }
+
+    /**
      * Check db.
      * @param modelEntities the model entities
      * @param colWrongSize  the col wrong size
@@ -260,6 +277,29 @@ public class DatabaseUtil {
      */
     public void checkDb(Map<String, ModelEntity> modelEntities, List<String> colWrongSize, List<String> messages, boolean checkPks,
                         boolean checkFks, boolean checkFkIdx, boolean addMissing) {
+        checkDb(modelEntities, null, colWrongSize, messages, checkPks, checkFks, checkFkIdx, addMissing);
+    }
+
+    /**
+     * Same as {@link #checkDb(Map, List, List, boolean, boolean, boolean, boolean)}, but with a
+     * separate map used ONLY to resolve {@code type="one"} relation targets, so an entity that's
+     * being managed here (created/altered) can still have its foreign keys resolved even when the
+     * relation's target entity is intentionally excluded from {@code modelEntities} (e.g. because a
+     * different schema-management-strategy, like Flyway, manages it instead of auto-DDL).
+     * @param modelEntities      the model entities
+     * @param referenceEntities  the complete set of entities relation targets may be resolved
+     *      against, or {@code null} to resolve relation targets against {@code modelEntities} only
+     *      (this method's exact prior behavior, before this parameter existed)
+     * @param colWrongSize       the col wrong size
+     * @param messages           the messages
+     * @param checkPks           the check pks
+     * @param checkFks           the check fks
+     * @param checkFkIdx         the check fk idx
+     * @param addMissing         the add missing
+     */
+    public void checkDb(Map<String, ModelEntity> modelEntities, Map<String, ModelEntity> referenceEntities, List<String> colWrongSize,
+                        List<String> messages, boolean checkPks, boolean checkFks, boolean checkFkIdx, boolean addMissing) {
+        Map<String, ModelEntity> relationLookupEntities = referenceEntities != null ? referenceEntities : modelEntities;
         if (isLegacy) {
             throw new RuntimeException("Cannot run checkDb on a legacy database connection; configure a database helper (entityengine.xml)");
         }
@@ -524,7 +564,7 @@ public class DatabaseUtil {
 
                 if (addMissing) {
                     // create the table
-                    tableFutures.add(executor.submit(new CreateTableCallable(entity, modelEntities, tableName)));
+                    tableFutures.add(executor.submit(new CreateTableCallable(entity, relationLookupEntities, tableName)));
                 }
             }
         }
@@ -533,6 +573,21 @@ public class DatabaseUtil {
         }
 
         timer.timerString("After Individual Table/Column Check");
+
+        // -remove tables belonging to entities that are present in relationLookupEntities but excluded from
+        // modelEntities (e.g. because a different schema-management-strategy such as Flyway owns them), so
+        // they are not incorrectly flagged below as tables with no corresponding entity; this is a no-op when
+        // no separate referenceEntities map was supplied, since relationLookupEntities is then modelEntities itself
+        if (relationLookupEntities != modelEntities) {
+            for (ModelEntity entity : relationLookupEntities.values()) {
+                if (entity instanceof ModelViewEntity || entity.getNeverCheck() || modelEntities.containsKey(entity.getEntityName())) {
+                    continue;
+                }
+                String plainTableName = entity.getPlainTableName();
+                String tableName = UtilValidate.isNotEmpty(schemaName) ? schemaName + "." + plainTableName : plainTableName;
+                tableNames.remove(tableName);
+            }
+        }
 
         // -list all tables that do not have a corresponding entity
         for (String tableName : tableNames) {
@@ -566,7 +621,7 @@ public class DatabaseUtil {
         if (datasourceInfo.getUseForeignKeys()) {
             int totalFks = 0;
             for (ModelEntity curEntity : entitiesAdded) {
-                totalFks += this.createForeignKeys(curEntity, modelEntities, datasourceInfo.getConstraintNameClipLength(),
+                totalFks += this.createForeignKeys(curEntity, relationLookupEntities, datasourceInfo.getConstraintNameClipLength(),
                                                    datasourceInfo.getFkStyle(), datasourceInfo.getUseFkInitiallyDeferred(), messages);
             }
             if (totalFks > 0) Debug.logImportant("==== TOTAL Foreign Keys Created: " + totalFks, MODULE);
@@ -637,7 +692,7 @@ public class DatabaseUtil {
                             continue;
                         }
 
-                        ModelEntity relModelEntity = modelEntities.get(modelRelation.getRelEntityName());
+                        ModelEntity relModelEntity = relationLookupEntities.get(modelRelation.getRelEntityName());
                         if (relModelEntity == null) {
                             Debug.logError("No such relation: " + entity.getEntityName() + " -> " + modelRelation.getRelEntityName(), MODULE);
                             continue;

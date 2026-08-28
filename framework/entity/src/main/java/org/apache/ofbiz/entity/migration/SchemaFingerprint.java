@@ -28,6 +28,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -98,14 +99,16 @@ final class SchemaFingerprint {
 
     /**
      * Same as {@link #compute(Connection, Set)}, but scoped to a specific schema when computing
-     * each table's columns — see {@link SchemaDriftAuditor#columnNames(Connection, String, String)}.
+     * each table's columns — see {@link SchemaDriftAuditor#columnsBySchema(Connection, String)}.
      * @param schemaName the schema to scope table introspection to, or {@code null}/blank for the
      *      connection's default (unscoped) behavior
      */
     static String compute(Connection conn, String schemaName, Set<String> tableNames) throws SQLException {
+        Map<String, Set<String>> columnsBySchema = SchemaDriftAuditor.columnsBySchema(conn, schemaName);
         StringBuilder canonical = new StringBuilder();
         for (String tableName : tableNames) {
-            Set<String> columns = new TreeSet<>(SchemaDriftAuditor.columnNames(conn, schemaName, tableName));
+            String normalizedName = SchemaDriftAuditor.normalizedTableName(conn, tableName);
+            Set<String> columns = new TreeSet<>(columnsBySchema.getOrDefault(normalizedName, Set.of()));
             canonical.append(tableName).append('=').append(String.join(",", columns)).append(';');
         }
         try {

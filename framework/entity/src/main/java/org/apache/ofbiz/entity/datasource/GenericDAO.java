@@ -1448,6 +1448,19 @@ public class GenericDAO {
     }
 
     /**
+     * Check db.
+     * @param modelEntities the model entities
+     * @param referenceEntities the complete set of entities in scope, used only to resolve relation targets
+     * @param messages the messages
+     * @param addMissing the add missing
+     */
+    public void checkDb(Map<String, ModelEntity> modelEntities, Map<String, ModelEntity> referenceEntities, List<String> messages,
+            boolean addMissing) {
+        DatabaseUtil dbUtil = new DatabaseUtil(this.helperInfo);
+        dbUtil.checkDb(modelEntities, referenceEntities, messages, addMissing);
+    }
+
+    /**
      * Creates a list of ModelEntity objects based on meta data from the database
      */
     public List<ModelEntity> induceModelFromDb(Collection<String> messages) {

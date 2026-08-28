@@ -21,6 +21,8 @@ package org.apache.ofbiz.entity.migration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -37,6 +39,8 @@ import org.apache.ofbiz.entity.GenericEntityException;
 import org.apache.ofbiz.entity.config.model.Datasource;
 import org.apache.ofbiz.entity.config.model.EntityConfig;
 import org.apache.ofbiz.entity.config.model.InlineJdbc;
+import org.apache.ofbiz.entity.datasource.GenericHelperInfo;
+import org.apache.ofbiz.entity.jdbc.DatabaseUtil;
 import org.apache.ofbiz.entity.model.ModelGroupReader;
 import org.apache.ofbiz.entity.model.ModelReader;
 
@@ -62,7 +66,7 @@ final class MigrationSupport {
      * migrations only run against the datasource(s) its own entities actually belong to).
      */
     record JdbcTarget(String groupName, String datasourceName, String vendor, String jdbcUrl, String jdbcUsername,
-            String jdbcPassword, String schemaName) { }
+            String jdbcPassword) { }
 
     /**
      * Resolves a single datasource into a migratable target.
@@ -84,7 +88,32 @@ final class MigrationSupport {
             return null;
         }
         return new JdbcTarget(groupName, datasourceName, datasource.getFieldTypeName(), jdbc.getJdbcUri(),
-                jdbc.getJdbcUsername(), EntityConfig.getJdbcPassword(jdbc), datasource.getSchemaName());
+                jdbc.getJdbcUsername(), EntityConfig.getJdbcPassword(jdbc));
+    }
+
+    /**
+     * Resolves the schema a JDBC target's queries should be scoped to, using the same case-folding
+     * and {@code use-schemas} logic Entity Engine's own auto-DDL already relies on ({@link
+     * DatabaseUtil#getSchemaName(DatabaseMetaData)}), instead of reading {@code entityengine.xml}'s
+     * {@code schema-name} attribute directly and independently re-deriving vendor-specific case
+     * rules. Must be called against an already-open connection, since the live {@link
+     * DatabaseMetaData} determines the vendor's actual case-folding behavior.
+     * @param target the JDBC target to resolve a schema for
+     * @param conn a live connection to the same datasource {@code target} identifies
+     * @return the resolved schema name, or {@code null} if schemas aren't in use for this datasource,
+     *      or if {@code target.datasourceName()} does not match a real, currently-configured
+     *      {@code <datasource>} (the common case in this package's own tests, which use placeholder
+     *      datasource names that are never meant to resolve against real {@code entityengine.xml}
+     *      configuration)
+     * @throws SQLException if the schema cannot be resolved
+     */
+    static String resolveSchemaName(JdbcTarget target, Connection conn) throws SQLException {
+        if (EntityConfig.getDatasource(target.datasourceName()) == null) {
+            return null;
+        }
+        GenericHelperInfo helperInfo = new GenericHelperInfo(target.groupName(), target.datasourceName());
+        DatabaseUtil dbUtil = new DatabaseUtil(helperInfo);
+        return dbUtil.getSchemaName(conn.getMetaData());
     }
 
     /**

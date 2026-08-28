@@ -30,6 +30,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -282,17 +283,24 @@ public class GenericDelegator implements Delegator {
 
             try {
                 Datasource datasource = EntityConfig.getDatasource(helperBaseName);
-                boolean flywayManaged = "flyway".equals(datasource.getSchemaManagementStrategy());
-                if (datasource.getCheckOnStart() && !flywayManaged) {
-                    if (Debug.infoOn()) {
-                        Debug.logInfo("Doing database check as requested in entityengine.xml with addMissing="
-                                + datasource.getAddMissingOnStart(), MODULE);
+                if (datasource.getCheckOnStart()) {
+                    Map<String, ModelEntity> allEntities = this.getModelEntityMapByGroup(groupName);
+                    Map<String, ModelEntity> entities = allEntities;
+                    Optional<SchemaCoverage> coverage = SchemaCoverageRegistry.lookup(helperBaseName);
+                    if (coverage.isPresent()) {
+                        entities = coverage.get().entitiesNotManagedByThisStrategy(allEntities, datasource.getFieldTypeName());
                     }
-                    helper.checkDataSource(this.getModelEntityMapByGroup(groupName), null, datasource.getAddMissingOnStart());
-                } else if (datasource.getCheckOnStart() && flywayManaged && Debug.infoOn()) {
-                    Debug.logInfo("Skipping Entity Engine auto-DDL check for datasource '" + helperBaseName
-                            + "': schema-management-strategy is 'flyway' - Flyway migrations are the sole source of "
-                            + "schema changes for this datasource", MODULE);
+                    if (!entities.isEmpty()) {
+                        if (Debug.infoOn()) {
+                            Debug.logInfo("Doing database check as requested in entityengine.xml with addMissing="
+                                    + datasource.getAddMissingOnStart(), MODULE);
+                        }
+                        helper.checkDataSource(entities, allEntities, null, datasource.getAddMissingOnStart());
+                    } else if (Debug.infoOn()) {
+                        Debug.logInfo("Skipping Entity Engine auto-DDL check for datasource '" + helperBaseName
+                                + "': every entity in group '" + groupName + "' is already covered by its "
+                                + "configured schema-management-strategy", MODULE);
+                    }
                 }
             } catch (GenericEntityException e) {
                 Debug.logWarning(e, e.getMessage(), MODULE);

@@ -141,4 +141,16 @@ public interface GenericHelper {
      *@param addMissing Flag indicating whether or not to add missing entities and fields on the server
      */
     void checkDataSource(Map<String, ModelEntity> modelEntities, List<String> messages, boolean addMissing) throws GenericEntityException;
+
+    /** Check the datasource to make sure the entity definitions are correct, optionally adding missing entities or fields on the server
+     *@param modelEntities Map of entityName names and ModelEntity values to actually check/create/alter
+     *@param referenceEntities the complete set of entities in scope, used only to resolve type="one" relation
+     *      targets that fall outside modelEntities (e.g. entities managed by a different
+     *      schema-management-strategy) - never consulted for table creation/alteration, only for relation
+     *      lookups; pass null to fall back to resolving relation targets against modelEntities only
+     *@param messages List to put any result messages in
+     *@param addMissing Flag indicating whether or not to add missing entities and fields on the server
+     */
+    void checkDataSource(Map<String, ModelEntity> modelEntities, Map<String, ModelEntity> referenceEntities, List<String> messages,
+            boolean addMissing) throws GenericEntityException;
 }

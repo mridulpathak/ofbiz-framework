@@ -23,9 +23,14 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+
+import org.apache.ofbiz.entity.jdbc.DatabaseUtil;
 
 /**
  * Compares a live database's actual schema against a reference schema (typically a freshly
@@ -46,10 +51,23 @@ public final class SchemaDriftAuditor {
 
     public List<DriftFinding> findDrift(List<String> tableNames) {
         List<DriftFinding> findings = new ArrayList<>();
+        Map<String, Set<String>> liveColumnsByTable;
+        Map<String, Set<String>> referenceColumnsByTable;
+        try {
+            liveColumnsByTable = columnsBySchema(liveSchema, null);
+            referenceColumnsByTable = columnsBySchema(referenceSchema, null);
+        } catch (SQLException e) {
+            for (String tableName : tableNames) {
+                findings.add(new DriftFinding(tableName, "failed to compare: " + e.getMessage()));
+            }
+            return findings;
+        }
         for (String tableName : tableNames) {
             try {
-                Set<String> liveColumns = SchemaDriftAuditor.columnNames(liveSchema, tableName);
-                Set<String> referenceColumns = SchemaDriftAuditor.columnNames(referenceSchema, tableName);
+                String liveKey = normalizedTableName(liveSchema, tableName);
+                String referenceKey = normalizedTableName(referenceSchema, tableName);
+                Set<String> liveColumns = liveColumnsByTable.getOrDefault(liveKey, Set.of());
+                Set<String> referenceColumns = referenceColumnsByTable.getOrDefault(referenceKey, Set.of());
 
                 Set<String> missingFromLive = new LinkedHashSet<>(referenceColumns);
                 missingFromLive.removeAll(liveColumns);
@@ -71,26 +89,49 @@ public final class SchemaDriftAuditor {
         return findings;
     }
 
-    static Set<String> columnNames(Connection conn, String tableName) throws SQLException {
-        return columnNames(conn, null, tableName);
+    /**
+     * Fetches every column of every table in {@code schemaName} (or unscoped, if {@code
+     * schemaName} is null/blank) in one metadata call, keyed by each table's name normalized the
+     * same way {@link DatabaseUtil} itself normalizes table names read back from the database —
+     * via {@link DatabaseUtil.ColumnCheckInfo#fixupTableName} — so a table-name case difference
+     * between what the database actually stores and what a caller asks for doesn't cause a missed
+     * match. One metadata call regardless of how many tables are needed, rather than one call per
+     * table.
+     * @param schemaName the schema to scope the fetch to, or {@code null}/blank for unscoped
+     * @return column names (uppercased) keyed by normalized table name
+     */
+    static Map<String, Set<String>> columnsBySchema(Connection conn, String schemaName) throws SQLException {
+        DatabaseMetaData metaData = conn.getMetaData();
+        boolean needsUpperCase = metaData.storesLowerCaseIdentifiers() || metaData.storesMixedCaseIdentifiers();
+        String schemaPattern = schemaName == null || schemaName.isBlank() ? null : schemaName;
+        Map<String, Set<String>> columnsByTable = new HashMap<>();
+        try (ResultSet rs = metaData.getColumns(null, schemaPattern, null, null)) {
+            while (rs.next()) {
+                // fixupTableName's own "already schema-qualified?" guard is unreliable (it does a
+                // literal backslash-dot string check, not a real prefix test), so it's used here
+                // only for its case-folding half - lookupSchemaName is deliberately always null.
+                // No prefix is needed anyway: this method already scopes its query to one schema
+                // via schemaPattern, so its result map is never merged with another schema's, and
+                // a bare (case-folded) table name is unambiguous within it.
+                String normalizedTableName = DatabaseUtil.ColumnCheckInfo.fixupTableName(
+                        rs.getString("TABLE_NAME"), null, needsUpperCase);
+                columnsByTable.computeIfAbsent(normalizedTableName, key -> new TreeSet<>())
+                        .add(rs.getString("COLUMN_NAME").toUpperCase());
+            }
+        }
+        return columnsByTable;
     }
 
     /**
-     * Same as {@link #columnNames(Connection, String)}, but scoped to a specific schema — for
-     * callers that know the configured schema and need to avoid folding together a same-named
-     * table that legitimately exists in a different schema (e.g. OFBiz's per-tenant schemas).
-     * @param schemaName the schema to scope the lookup to, or {@code null}/blank for the
-     *      connection's default (unscoped) behavior
+     * Normalizes a table name (e.g. from {@code ModelEntity.getPlainTableName()}) the same way
+     * {@link #columnsBySchema} normalizes the names it reads back from the database, so a caller
+     * can reliably look a specific table's columns up from {@link #columnsBySchema}'s result.
      */
-    static Set<String> columnNames(Connection conn, String schemaName, String tableName) throws SQLException {
-        Set<String> columns = new LinkedHashSet<>();
+    static String normalizedTableName(Connection conn, String tableName) throws SQLException {
         DatabaseMetaData metaData = conn.getMetaData();
-        String schemaPattern = schemaName == null || schemaName.isBlank() ? null : schemaName;
-        try (ResultSet rs = metaData.getColumns(null, schemaPattern, tableName, null)) {
-            while (rs.next()) {
-                columns.add(rs.getString("COLUMN_NAME").toUpperCase());
-            }
-        }
-        return columns;
+        boolean needsUpperCase = metaData.storesLowerCaseIdentifiers() || metaData.storesMixedCaseIdentifiers();
+        // Deliberately no schema prefix here either - see the comment in columnsBySchema for why
+        // one isn't needed, and why relying on fixupTableName's own prefix-detection would be risky.
+        return DatabaseUtil.ColumnCheckInfo.fixupTableName(tableName, null, needsUpperCase);
     }
 }

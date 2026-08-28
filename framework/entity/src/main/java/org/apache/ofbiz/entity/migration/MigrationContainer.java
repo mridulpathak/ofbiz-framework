@@ -27,6 +27,8 @@ import org.apache.ofbiz.base.container.ContainerConfig;
 import org.apache.ofbiz.base.container.ContainerException;
 import org.apache.ofbiz.base.start.StartupCommand;
 import org.apache.ofbiz.entity.GenericEntityConfException;
+import org.apache.ofbiz.entity.SchemaCoverage;
+import org.apache.ofbiz.entity.SchemaCoverageRegistry;
 import org.apache.ofbiz.entity.config.model.Datasource;
 import org.apache.ofbiz.entity.config.model.DelegatorElement;
 import org.apache.ofbiz.entity.config.model.EntityConfig;
@@ -73,6 +75,9 @@ public class MigrationContainer implements Container {
                 SchemaManagementStrategy strategy = resolveStrategy(strategyValue);
                 if (strategy == AUTO_DDL_STRATEGY) {
                     continue;
+                }
+                if (strategy instanceof SchemaCoverage coverage) {
+                    SchemaCoverageRegistry.register(groupMap.getDatasourceName(), coverage);
                 }
                 MigrationSupport.JdbcTarget target =
                         MigrationSupport.resolveJdbcTarget(groupMap.getGroupName(), groupMap.getDatasourceName());
