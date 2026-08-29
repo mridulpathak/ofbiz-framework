@@ -49,13 +49,18 @@ public class MigrationSupportTests {
 
     @Test
     void resolveComponentEntityGroupsFindsTheDefaultGroupForARealComponent() throws Exception {
-        // plugins/example's entities are not explicitly listed in any <entity-group> mapping, so
-        // this exercises the DelegatorElement.getDefaultGroupName() fallback inside
-        // ModelGroupReader.getEntityGroupName - real config, real component, no fixtures needed.
-        Set<String> groups = MigrationSupport.resolveComponentEntityGroups("default", "example");
+        // framework/entity's own test-only entities (Testing, TestingItem, etc. - see
+        // entitymodel_test.xml) are not explicitly listed in any <entity-group> mapping, so this
+        // exercises the DelegatorElement.getDefaultGroupName() fallback inside
+        // ModelGroupReader.getEntityGroupName - real config, a real always-present framework
+        // component (no dependency on any optional plugin), no fixtures needed. Component "entity"
+        // also contributes some of its own entities (Tenant, Component, etc.) to a second group,
+        // org.apache.ofbiz.tenant - this assertion only checks that the default group is among the
+        // results, which still holds.
+        Set<String> groups = MigrationSupport.resolveComponentEntityGroups("default", "entity");
 
         assertTrue(groups.contains("org.apache.ofbiz"),
-                "plugins/example's entities should resolve to the default entity group, got: " + groups);
+                "framework/entity's own entities should resolve to the default entity group, got: " + groups);
     }
 
     @Test

@@ -34,12 +34,13 @@ import org.junit.jupiter.api.Test;
 public class SchemaFingerprintTests {
 
     @Test
-    void resolveComponentTableNamesFindsExamplesRealTables() throws Exception {
-        // plugins/example declares its own entity model (see MigrationSupportTests), so this
-        // exercises the real ModelReader/ModelEntity table-name resolution against real config.
-        Set<String> tableNames = SchemaFingerprint.resolveComponentTableNames("default", "example");
+    void resolveComponentTableNamesFindsTheEntityComponentsRealTables() throws Exception {
+        // framework/entity declares its own entity model (see MigrationSupportTests), so this
+        // exercises the real ModelReader/ModelEntity table-name resolution against real config -
+        // no dependency on any optional plugin, since framework/entity is never optional.
+        Set<String> tableNames = SchemaFingerprint.resolveComponentTableNames("default", "entity");
 
-        assertTrue(tableNames.contains("EXAMPLE"), "expected the Example entity's table, got: " + tableNames);
+        assertTrue(tableNames.contains("TESTING"), "expected the Testing entity's table, got: " + tableNames);
     }
 
     @Test

@@ -128,31 +128,31 @@ public class FlywayStrategyTests {
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "driftblocked");
 
-        // Stand in for auto-DDL having already created this component's real "example" entity table
-        // before Flyway ever recorded a fingerprint for it: resolveComponentTableNames resolves
-        // "example" against the REAL entity model (EXAMPLE), not the temp-directory migration used
-        // for WIDGET above, so EXAMPLE must actually exist here for the later ALTER TABLE to have
-        // something to drift.
+        // Stand in for auto-DDL having already created this component's real "entity" component's
+        // Testing entity table before Flyway ever recorded a fingerprint for it:
+        // resolveComponentTableNames resolves "entity" against the REAL entity model (which includes
+        // TESTING, among several others), not the temp-directory migration used for WIDGET above, so
+        // TESTING must actually exist here for the later ALTER TABLE to have something to drift.
         try (Connection conn = DriverManager.getConnection(jdbcUrl, USER, PASSWORD);
                 Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE EXAMPLE (EXAMPLE_ID VARCHAR(20) NOT NULL PRIMARY KEY)");
+            stmt.execute("CREATE TABLE TESTING (TESTING_ID VARCHAR(20) NOT NULL PRIMARY KEY)");
         }
 
         // First run: migrates cleanly and records a fingerprint.
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl));
+        new FlywayStrategy().migrateComponent(componentRoot, "entity", "default", target("h2", jdbcUrl));
         assertTrue(tableExists(jdbcUrl, "WIDGET"));
 
         // Simulate drift: something outside Flyway (e.g. auto-DDL while this datasource was
         // "auto-ddl") added a column to a table this component owns.
         try (Connection conn = DriverManager.getConnection(jdbcUrl, USER, PASSWORD);
                 Statement stmt = conn.createStatement()) {
-            stmt.execute("ALTER TABLE EXAMPLE ADD COLUMN DRIFTED_FIELD VARCHAR(20)");
+            stmt.execute("ALTER TABLE TESTING ADD COLUMN DRIFTED_FIELD VARCHAR(20)");
         }
 
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl)));
+                new FlywayStrategy().migrateComponent(componentRoot, "entity", "default", target("h2", jdbcUrl)));
 
-        assertTrue(thrown.getMessage().contains("example"),
+        assertTrue(thrown.getMessage().contains("entity"),
                 "the failure must be attributed to the component, got: " + thrown.getMessage());
     }
 
@@ -161,22 +161,23 @@ public class FlywayStrategyTests {
         Path componentRoot = componentRootWithMigration(tempDir, "h2",
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "groupmiss");
-        // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
-        // (see MigrationSupportTests) - targeting an unrelated group name must skip it entirely.
+        // "entity" (framework/entity) resolves to org.apache.ofbiz (among other groups) via the
+        // default-group fallback (see MigrationSupportTests) - targeting an unrelated group name must
+        // skip it entirely.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
                 "org.apache.ofbiz.olap", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
-        // A mock stands in for plugins/example's real ComponentConfig: getComponentName() must return
-        // "example" (a real, resolvable component) so entity-group resolution reflects reality, but
+        // A mock stands in for framework/entity's real ComponentConfig: getComponentName() must return
+        // "entity" (a real, resolvable component) so entity-group resolution reflects reality, but
         // rootLocation() is redirected to this test's temp directory so that, were the group filter to
         // fail to skip this component, migrateComponent would run against real migration SQL and the
         // WIDGET assertion below could actually catch it - unlike loading the real ComponentConfig for
-        // "example", whose rootLocation() points at plugins/example (no migrations/h2 directory there),
+        // "entity", whose rootLocation() points at framework/entity (no migrations/h2 directory there),
         // which would make this test pass trivially regardless of whether the group filter works.
-        ComponentConfig exampleComponent = mock(ComponentConfig.class);
-        when(exampleComponent.getComponentName()).thenReturn("example");
-        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+        ComponentConfig entityComponent = mock(ComponentConfig.class);
+        when(entityComponent.getComponentName()).thenReturn("entity");
+        when(entityComponent.rootLocation()).thenReturn(componentRoot);
 
-        assertDoesNotThrow(() -> new FlywayStrategy().apply("default", target, List.of(exampleComponent)));
+        assertDoesNotThrow(() -> new FlywayStrategy().apply("default", target, List.of(entityComponent)));
 
         assertFalse(tableExists(jdbcUrl, "WIDGET"), "a component outside the target's entity group must not be migrated");
     }
@@ -186,15 +187,16 @@ public class FlywayStrategyTests {
         Path componentRoot = componentRootWithMigration(tempDir, "h2",
                 "V1__create_widget.sql", "CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL PRIMARY KEY);");
         String jdbcUrl = jdbcUrl(tempDir, "grouphit");
-        // "example" (plugins/example) resolves to org.apache.ofbiz via the default-group fallback
-        // (see MigrationSupportTests) - targeting that same group must actually run the migration.
+        // "entity" (framework/entity) resolves to org.apache.ofbiz (among other groups) via the
+        // default-group fallback (see MigrationSupportTests) - targeting that same group must
+        // actually run the migration.
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
                 "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
-        ComponentConfig exampleComponent = mock(ComponentConfig.class);
-        when(exampleComponent.getComponentName()).thenReturn("example");
-        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+        ComponentConfig entityComponent = mock(ComponentConfig.class);
+        when(entityComponent.getComponentName()).thenReturn("entity");
+        when(entityComponent.rootLocation()).thenReturn(componentRoot);
 
-        assertDoesNotThrow(() -> new FlywayStrategy().apply("default", target, List.of(exampleComponent)));
+        assertDoesNotThrow(() -> new FlywayStrategy().apply("default", target, List.of(entityComponent)));
 
         assertTrue(tableExists(jdbcUrl, "WIDGET"), "a component inside the target's entity group must be migrated");
     }
@@ -206,19 +208,19 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "noentitygroups");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
                 "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
-        // "party" (applications/party) declares no <entity-resource type="model"> of its own, so
+        // "base" (framework/base) declares no <entity-resource> of any kind, so
         // resolveComponentEntityGroups genuinely returns an empty set for it against the real, already
         // loaded config (see MigrationSupportTests) - a mock stands in only to redirect rootLocation()
         // at this test's temp directory, which ships a migrations/h2/ directory that apply must refuse
-        // to silently skip rather than actually loading plugins/party's real (migration-less) root.
-        ComponentConfig partyComponent = mock(ComponentConfig.class);
-        when(partyComponent.getComponentName()).thenReturn("party");
-        when(partyComponent.rootLocation()).thenReturn(componentRoot);
+        // to silently skip rather than actually loading framework/base's real (migration-less) root.
+        ComponentConfig baseComponent = mock(ComponentConfig.class);
+        when(baseComponent.getComponentName()).thenReturn("base");
+        when(baseComponent.rootLocation()).thenReturn(componentRoot);
 
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().apply("default", target, List.of(partyComponent)));
+                new FlywayStrategy().apply("default", target, List.of(baseComponent)));
 
-        assertTrue(thrown.getMessage().contains("party"),
+        assertTrue(thrown.getMessage().contains("base"),
                 "the failure must name the component with unresolvable entity groups, got: " + thrown.getMessage());
     }
 
@@ -229,14 +231,14 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "validatenever");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
                 "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
-        ComponentConfig exampleComponent = mock(ComponentConfig.class);
-        when(exampleComponent.getComponentName()).thenReturn("example");
-        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+        ComponentConfig entityComponent = mock(ComponentConfig.class);
+        when(entityComponent.getComponentName()).thenReturn("entity");
+        when(entityComponent.rootLocation()).thenReturn(componentRoot);
 
         ContainerException thrown = assertThrows(ContainerException.class, () ->
-                new FlywayStrategy().validate("default", target, List.of(exampleComponent)));
+                new FlywayStrategy().validate("default", target, List.of(entityComponent)));
 
-        assertTrue(thrown.getMessage().contains("example"));
+        assertTrue(thrown.getMessage().contains("entity"));
     }
 
     @Test
@@ -246,13 +248,13 @@ public class FlywayStrategyTests {
         String jdbcUrl = jdbcUrl(tempDir, "validateclean");
         MigrationSupport.JdbcTarget target = new MigrationSupport.JdbcTarget(
                 "org.apache.ofbiz", "irrelevant-datasource", "h2", jdbcUrl, USER, PASSWORD);
-        ComponentConfig exampleComponent = mock(ComponentConfig.class);
-        when(exampleComponent.getComponentName()).thenReturn("example");
-        when(exampleComponent.rootLocation()).thenReturn(componentRoot);
+        ComponentConfig entityComponent = mock(ComponentConfig.class);
+        when(entityComponent.getComponentName()).thenReturn("entity");
+        when(entityComponent.rootLocation()).thenReturn(componentRoot);
 
-        new FlywayStrategy().migrateComponent(componentRoot, "example", "default", target("h2", jdbcUrl));
+        new FlywayStrategy().migrateComponent(componentRoot, "entity", "default", target("h2", jdbcUrl));
 
-        assertDoesNotThrow(() -> new FlywayStrategy().validate("default", target, List.of(exampleComponent)));
+        assertDoesNotThrow(() -> new FlywayStrategy().validate("default", target, List.of(entityComponent)));
     }
 
     @Test
@@ -267,16 +269,15 @@ public class FlywayStrategyTests {
 
     @Test
     void entitiesNotManagedByThisStrategyExcludesEntitiesOwnedByAComponentWithMigrationsForTheVendor() throws Exception {
-        // "Example" is plugins/example's own entity, and plugins/example genuinely has migrations
-        // for "h2" (see componentRootWithMigration usage elsewhere in this file) once its migrations
-        // directory is on the configured location for it - but this test targets the REAL
-        // plugins/example root (no override), which has no migrations/h2 directory today, so this
-        // exercises the "not covered" branch for a real entity/component pairing without needing
-        // any filesystem setup: a real component with no migrations, feeding a real entity's
-        // ModelEntity, must come back in the "not managed" (uncovered) result.
+        // "Testing" is framework/entity's own test-only entity (always present, no dependency on any
+        // optional plugin - see entitymodel_test.xml), and this test targets the REAL framework/entity
+        // root (no location override), which has no migrations/h2 directory today, so this exercises
+        // the "not covered" branch for a real entity/component pairing without needing any filesystem
+        // setup: a real component with no migrations, feeding a real entity's ModelEntity, must come
+        // back in the "not managed" (uncovered) result.
         ModelReader modelReader = ModelReader.getModelReader("default");
-        ModelEntity exampleEntity = modelReader.getModelEntity("Example");
-        Map<String, ModelEntity> entities = Map.of("Example", exampleEntity);
+        ModelEntity testingEntity = modelReader.getModelEntity("Testing");
+        Map<String, ModelEntity> entities = Map.of("Testing", testingEntity);
 
         Map<String, ModelEntity> notManaged = new FlywayStrategy().entitiesNotManagedByThisStrategy(entities, "h2");
 
@@ -286,14 +287,14 @@ public class FlywayStrategyTests {
     @Test
     void entitiesNotManagedByThisStrategyExcludesAnEntityWhoseComponentHasMigrationsForTheActiveVendor(@TempDir Path tempDir)
             throws Exception {
-        String propertyName = "ofbiz.migrations.location.example";
+        String propertyName = "ofbiz.migrations.location.entity";
         Path migrationsDir = tempDir.resolve("overridden-migrations");
         Files.createDirectories(migrationsDir.resolve("h2"));
         System.setProperty(propertyName, migrationsDir.toString());
         try {
             ModelReader modelReader = ModelReader.getModelReader("default");
-            ModelEntity exampleEntity = modelReader.getModelEntity("Example");
-            Map<String, ModelEntity> entities = Map.of("Example", exampleEntity);
+            ModelEntity testingEntity = modelReader.getModelEntity("Testing");
+            Map<String, ModelEntity> entities = Map.of("Testing", testingEntity);
 
             Map<String, ModelEntity> notManaged = new FlywayStrategy().entitiesNotManagedByThisStrategy(entities, "h2");
 
