@@ -70,8 +70,9 @@ public final class BaselineComponentMigration {
         }
 
         Debug.logWarning("[baselineMigration] Baselining marks a component's migrations as already applied WITHOUT"
-                + " running them. Only do this after a SchemaDriftAuditor run has confirmed the live schema already"
-                + " matches this baseline.", MODULE);
+                + " running them. Only do this after running ./gradlew auditSchemaDrift -Pcomponent=" + componentName
+                + " -PscratchJdbcUrl=<url> -PscratchJdbcUsername=<user> -PscratchJdbcPassword=<password> has confirmed"
+                + " the live schema already matches this baseline.", MODULE);
 
         MigrationSupport.bootstrapComponentsIfNeeded();
 

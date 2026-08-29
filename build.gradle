@@ -835,6 +835,33 @@ task runMigrations(group: ofbizServer, dependsOn: classes) {
     }
 }
 
+task auditSchemaDrift(group: ofbizServer, dependsOn: classes) {
+    description = 'Compare a component\'s live (existing) schema against what running its real migrations from ' +
+            'scratch into an empty, same-vendor scratch database would produce - a pre-baseline safety check. ' +
+            'Usage: ./gradlew auditSchemaDrift -Pcomponent=example -PscratchJdbcUrl=... -PscratchJdbcUsername=... ' +
+            '-PscratchJdbcPassword=... [-PdelegatorName=default]'
+    doLast {
+        ['component', 'scratchJdbcUrl', 'scratchJdbcUsername'].each { required ->
+            if (!project.findProperty(required)) {
+                throw new GradleException("auditSchemaDrift requires -P${required}=<value>. ${description}")
+            }
+        }
+        javaexec {
+            classpath = sourceSets.main.runtimeClasspath
+            mainClass = 'org.apache.ofbiz.entity.migration.AuditSchemaDrift'
+            systemProperty 'ofbiz.home', rootDir.absolutePath
+            systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('ofbiz.migrations.location.') }
+            args = [
+                (project.findProperty('delegatorName') ?: 'default').toString(),
+                project.findProperty('component').toString(),
+                project.findProperty('scratchJdbcUrl').toString(),
+                project.findProperty('scratchJdbcUsername').toString(),
+                (project.findProperty('scratchJdbcPassword') ?: '').toString(),
+            ]
+        }
+    }
+}
+
 task terminateOfbiz(group: ofbizServer,
     description: 'Force termination of any running OFBiz servers, only use if \"--shutdown\" command fails') {
     doLast {

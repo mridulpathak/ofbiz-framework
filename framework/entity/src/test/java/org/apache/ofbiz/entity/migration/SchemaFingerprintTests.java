@@ -73,6 +73,36 @@ public class SchemaFingerprintTests {
     }
 
     @Test
+    void computeChangesWhenAColumnsTypeChanges() throws Exception {
+        String jdbcUrl = "jdbc:h2:mem:fingerprinttypechange;DB_CLOSE_DELAY=-1";
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20))");
+            String before = SchemaFingerprint.compute(conn, new TreeSet<>(Set.of("WIDGET")));
+
+            stmt.execute("ALTER TABLE WIDGET ALTER COLUMN WIDGET_ID VARCHAR(50)");
+            String after = SchemaFingerprint.compute(conn, new TreeSet<>(Set.of("WIDGET")));
+
+            assertNotEquals(before, after, "widening a column's size must change the fingerprint");
+        }
+    }
+
+    @Test
+    void computeChangesWhenAColumnsNullabilityChanges() throws Exception {
+        String jdbcUrl = "jdbc:h2:mem:fingerprintnullabilitychange;DB_CLOSE_DELAY=-1";
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE WIDGET (WIDGET_ID VARCHAR(20) NOT NULL, WIDGET_NAME VARCHAR(100))");
+            String before = SchemaFingerprint.compute(conn, new TreeSet<>(Set.of("WIDGET")));
+
+            stmt.execute("ALTER TABLE WIDGET ALTER COLUMN WIDGET_NAME SET NOT NULL");
+            String after = SchemaFingerprint.compute(conn, new TreeSet<>(Set.of("WIDGET")));
+
+            assertNotEquals(before, after, "changing a column's nullability must change the fingerprint");
+        }
+    }
+
+    @Test
     void loadReturnsNullWhenNothingHasBeenStoredYet() throws Exception {
         String jdbcUrl = "jdbc:h2:mem:fingerprintloadempty;DB_CLOSE_DELAY=-1";
         try (Connection conn = DriverManager.getConnection(jdbcUrl, "sa", "")) {

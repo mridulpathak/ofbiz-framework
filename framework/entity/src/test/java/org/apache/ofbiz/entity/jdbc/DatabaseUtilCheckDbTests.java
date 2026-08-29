@@ -121,6 +121,54 @@ class DatabaseUtilCheckDbTests {
     }
 
     @Test
+    void checkDbCreatesTheTableItselfAndItsForeignKeyWhenTheManagedEntityIsBrandNew() throws Exception {
+        ModelReader modelReader = ModelReader.getModelReader("default");
+        ModelEntity testingItem = modelReader.getModelEntity("TestingItem");
+        ModelEntity testing = modelReader.getModelEntity("Testing");
+
+        Map<String, ModelEntity> manageOnly = new HashMap<>();
+        manageOnly.put("TestingItem", testingItem);
+
+        Map<String, ModelEntity> reference = new HashMap<>();
+        reference.put("TestingItem", testingItem);
+        reference.put("Testing", testing);
+
+        String jdbcUrl = "jdbc:h2:mem:checkdbcreatenewtabletest;DB_CLOSE_DELAY=-1;INIT=CREATE SCHEMA IF NOT EXISTS OFBIZ\\;SET SCHEMA OFBIZ";
+        GenericHelperInfo helperInfo = new GenericHelperInfo("org.apache.ofbiz", "localh2");
+        helperInfo.setTenantId("checkdbcreatenewtabletest");
+        helperInfo.setOverrideJdbcUri(jdbcUrl);
+        helperInfo.setOverrideUsername(USER);
+        helperInfo.setOverridePassword(PASSWORD);
+        DatabaseUtil dbUtil = new DatabaseUtil(helperInfo);
+
+        // Only Testing exists ahead of time (standing in for it being managed by a different
+        // schema-management-strategy) - TestingItem does not exist anywhere yet, so checkDb itself
+        // must both create its table AND resolve its foreign key to Testing in the same pass,
+        // exercising the newly-created-table createForeignKeys path, not just the "does this
+        // existing relation already have an FK" reconciliation path the sibling test exercises.
+        assertNull(dbUtil.createTable(testing, reference, false), "setup: creating the TESTING table must succeed");
+
+        List<String> messages = new ArrayList<>();
+        dbUtil.checkDb(manageOnly, reference, null, messages, false, true, false, true);
+
+        boolean createdTestingItemTable = messages.stream()
+                .anyMatch(m -> m.startsWith("Created table [") && m.contains("TESTING_ITEM"));
+        assertTrue(createdTestingItemTable, "TestingItem's table should have been created; got messages: " + messages);
+
+        // A brand-new table's foreign keys are created eagerly, right after its CREATE TABLE, by
+        // checkDb's own entitiesAdded loop (DatabaseUtil#createForeignKeys(entity, relationLookupEntities, ...)),
+        // which reports its result as "Created N foreign keys for entity [...]" - a different message
+        // shape than the singular "Created foreign key <name> for entity [...]" the later per-relation
+        // reconciliation loop uses for tables that already existed before checkDb ran (the path the
+        // sibling test above exercises). This assertion targets the newly-created-table path.
+        boolean createdTestingItemToTestingFk = messages.stream()
+                .anyMatch(m -> m.startsWith("Created") && m.contains("foreign keys for entity [TestingItem]"));
+        assertTrue(createdTestingItemToTestingFk,
+                "TestingItem's relation to Testing should resolve via the reference map for its newly created "
+                        + "table, not just an already-existing one; got messages: " + messages);
+    }
+
+    @Test
     void checkDbDoesNotFlagATableAsOrphanedWhenItsEntityIsOnlyInTheReferenceMap() throws Exception {
         ModelReader modelReader = ModelReader.getModelReader("default");
         ModelEntity testingItem = modelReader.getModelEntity("TestingItem");

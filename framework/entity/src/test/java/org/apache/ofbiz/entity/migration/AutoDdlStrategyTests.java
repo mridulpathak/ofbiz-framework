@@ -18,24 +18,16 @@
  *******************************************************************************/
 package org.apache.ofbiz.entity.migration;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 import java.util.List;
 
-import org.apache.ofbiz.base.component.ComponentConfig;
+import org.junit.jupiter.api.Test;
 
-/**
- * The default strategy: does nothing. Entity Engine's existing auto-DDL path
- * (DelegatorContainer/checkDataSource) already manages this datasource's schema; Flyway must not
- * touch it.
- */
-final class AutoDdlStrategy implements SchemaManagementStrategy {
+public class AutoDdlStrategyTests {
 
-    @Override
-    public void apply(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void validate(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components) {
-        // Intentionally empty: an auto-ddl datasource has no "already applied" state to check.
+    @Test
+    void validateDoesNothingObservable() {
+        assertDoesNotThrow(() -> new AutoDdlStrategy().validate("default", null, List.of()));
     }
 }

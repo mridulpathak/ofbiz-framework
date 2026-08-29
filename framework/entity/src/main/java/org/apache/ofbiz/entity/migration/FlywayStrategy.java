@@ -113,7 +113,8 @@ final class FlywayStrategy implements SchemaManagementStrategy, SchemaCoverage {
      * migration was added since it last ran.
      * @throws ContainerException naming the component if anything is pending or has drifted
      */
-    void validate(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components)
+    @Override
+    public void validate(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components)
             throws ContainerException {
         for (ComponentConfig component : componentsMatchingGroup(delegatorName, target, components)) {
             validateComponent(component.rootLocation(), component.getComponentName(), delegatorName, target);
@@ -188,8 +189,14 @@ final class FlywayStrategy implements SchemaManagementStrategy, SchemaCoverage {
                 String liveFingerprint = SchemaFingerprint.compute(conn, schemaName, tableNames);
                 if (!storedFingerprint.equals(liveFingerprint)) {
                     throw new ContainerException("Component '" + componentName + "' schema has drifted since its last "
-                            + "Flyway-recorded state (fingerprint mismatch) - run SchemaDriftAuditor to see what changed,"
-                            + " then baselineMigration to reconcile before this component's migrations can run again");
+                            + "Flyway-recorded state (fingerprint mismatch) - run ./gradlew auditSchemaDrift "
+                            + "-Pcomponent=" + componentName + " -PscratchJdbcUrl=<url> -PscratchJdbcUsername=<user> "
+                            + "-PscratchJdbcPassword=<password> to compare what a fresh migration run would produce "
+                            + "against the current live schema, then baselineMigration to reconcile before this "
+                            + "component's migrations can run again. Note: a JDBC driver or database engine upgrade"
+                            + " can also change how column type/size metadata is reported even with no actual schema"
+                            + " change, which can trigger this same mismatch as a false positive - check"
+                            + " auditSchemaDrift's output before assuming real drift");
                 }
             }
             ComponentMigrator migrator = new ComponentMigrator(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword(),
@@ -226,7 +233,13 @@ final class FlywayStrategy implements SchemaManagementStrategy, SchemaCoverage {
             String liveFingerprint = SchemaFingerprint.compute(conn, schemaName, tableNames);
             if (!storedFingerprint.equals(liveFingerprint)) {
                 throw new ContainerException("Component '" + componentName + "' schema has drifted since its last "
-                        + "Flyway-recorded state - run SchemaDriftAuditor, then baselineMigration to reconcile");
+                        + "Flyway-recorded state - run ./gradlew auditSchemaDrift -Pcomponent=" + componentName
+                        + " -PscratchJdbcUrl=<url> -PscratchJdbcUsername=<user> -PscratchJdbcPassword=<password> to"
+                        + " compare what a fresh migration run would produce against the current live schema, then"
+                        + " baselineMigration to reconcile. Note: a JDBC driver or database engine upgrade can also"
+                        + " change how column type/size metadata is reported even with no actual schema change,"
+                        + " which can trigger this same mismatch as a false positive - check auditSchemaDrift's"
+                        + " output before assuming real drift");
             }
             ComponentMigrator migrator = new ComponentMigrator(target.jdbcUrl(), target.jdbcUsername(), target.jdbcPassword(),
                     migrationsDir, historyTable);

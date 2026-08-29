@@ -85,8 +85,7 @@ public class MigrationContainer implements Container {
                     continue;
                 }
                 if ("external".equals(executionMode)) {
-                    FlywayStrategy flywayStrategy = (FlywayStrategy) strategy;
-                    flywayStrategy.validate(delegatorName, target, components);
+                    strategy.validate(delegatorName, target, components);
                 } else {
                     strategy.apply(delegatorName, target, components);
                 }

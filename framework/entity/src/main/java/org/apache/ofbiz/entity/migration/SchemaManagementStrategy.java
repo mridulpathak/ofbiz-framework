@@ -39,4 +39,17 @@ interface SchemaManagementStrategy {
      * @throws ContainerException if applying the strategy fails, so OFBiz can shut down cleanly
      */
     void apply(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components) throws ContainerException;
+
+    /**
+     * Validates, without applying any changes, that this target is already in the state this
+     * strategy expects — for {@code execution-mode=external}, where boot must refuse to proceed if
+     * an out-of-band step (e.g. running migrations before boot) was skipped, or (for a strategy with
+     * nothing to validate, like auto-DDL) as a trivial no-op.
+     * @param delegatorName the {@code <delegator>} name the components' entity models and entity-group
+     *      mappings should be resolved against
+     * @param target the datasource/group to validate
+     * @param components every loaded component, for the strategy to filter and check as it sees fit
+     * @throws ContainerException if validation fails, so OFBiz can shut down cleanly
+     */
+    void validate(String delegatorName, MigrationSupport.JdbcTarget target, List<ComponentConfig> components) throws ContainerException;
 }

@@ -26,8 +26,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -90,7 +93,8 @@ final class SchemaFingerprint {
      * @param conn a live JDBC connection to the schema to inspect
      * @param tableNames the tables to fingerprint, in the order to fingerprint them (pass a sorted
      *      set, e.g. from {@link #resolveComponentTableNames}, for a stable result across calls)
-     * @return a hex-encoded SHA-256 hash of the tables' column names
+     * @return a hex-encoded SHA-256 hash of the tables' column signatures (name, type, size,
+     *      precision, nullability, and MySQL charset/collation when applicable)
      * @throws SQLException if the schema cannot be inspected
      */
     static String compute(Connection conn, Set<String> tableNames) throws SQLException {
@@ -104,12 +108,38 @@ final class SchemaFingerprint {
      *      connection's default (unscoped) behavior
      */
     static String compute(Connection conn, String schemaName, Set<String> tableNames) throws SQLException {
-        Map<String, Set<String>> columnsBySchema = SchemaDriftAuditor.columnsBySchema(conn, schemaName);
+        Map<String, Set<SchemaDriftAuditor.ColumnSignature>> columnsBySchema =
+                SchemaDriftAuditor.columnsBySchema(conn, schemaName);
         StringBuilder canonical = new StringBuilder();
         for (String tableName : tableNames) {
             String normalizedName = SchemaDriftAuditor.normalizedTableName(conn, tableName);
-            Set<String> columns = new TreeSet<>(columnsBySchema.getOrDefault(normalizedName, Set.of()));
-            canonical.append(tableName).append('=').append(String.join(",", columns)).append(';');
+            // ColumnSignature has no natural ordering the way String does via TreeSet's default
+            // comparator, so sort explicitly by column name (matching the previous sort-by-name
+            // behavior) to keep the resulting hash deterministic across calls. Chain a tiebreaker
+            // over every remaining field for the case of two signatures sharing a columnName (which
+            // hasDuplicateColumnNames can genuinely flag as ambiguous, e.g. columnsBySchema merging
+            // same-named tables from different MySQL databases) - without a FULLY exhaustive
+            // tiebreaker, the sort would fall back to List.sort's stability over the ResultSet's
+            // unspecified row order for any two signatures still tied after it, which is not itself
+            // guaranteed deterministic across calls.
+            List<SchemaDriftAuditor.ColumnSignature> columns = new ArrayList<>(
+                    columnsBySchema.getOrDefault(normalizedName, Set.of()));
+            columns.sort(Comparator.comparing(SchemaDriftAuditor.ColumnSignature::columnName)
+                    .thenComparing(SchemaDriftAuditor.ColumnSignature::typeName)
+                    .thenComparingInt(SchemaDriftAuditor.ColumnSignature::columnSize)
+                    .thenComparingInt(SchemaDriftAuditor.ColumnSignature::decimalDigits)
+                    .thenComparing(SchemaDriftAuditor.ColumnSignature::nullable)
+                    .thenComparing(SchemaDriftAuditor.ColumnSignature::charsetAndCollation));
+            canonical.append(tableName).append('=');
+            for (SchemaDriftAuditor.ColumnSignature column : columns) {
+                canonical.append(column.columnName()).append(':')
+                        .append(column.typeName()).append(':')
+                        .append(column.columnSize()).append(':')
+                        .append(column.decimalDigits()).append(':')
+                        .append(column.nullable()).append(':')
+                        .append(column.charsetAndCollation()).append(',');
+            }
+            canonical.append(';');
         }
         try {
             MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
