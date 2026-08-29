@@ -146,6 +146,13 @@ public final class SchemaDriftAuditor {
                     // only over-report (e.g. describing a changed column as a missing-plus-extra
                     // pair rather than one "changed" finding), never silently drop a real
                     // difference.
+                    Debug.logWarning("Table " + tableName + " has more than one column reported under the same "
+                            + "name on its live and/or reference side (likely columnsBySchema merging same-named "
+                            + "tables from more than one schema or database) - falling back to a plain "
+                            + "column-name set difference for this table instead of the usual, more precise "
+                            + "missing/extra/changed comparison. Any findings below for this table may describe a "
+                            + "changed column as a missing-plus-extra pair rather than one precise 'changed' "
+                            + "finding.", MODULE);
                     Set<ColumnSignature> missing = new LinkedHashSet<>(referenceColumns);
                     missing.removeAll(liveColumns);
                     if (!missing.isEmpty()) {
@@ -234,9 +241,16 @@ public final class SchemaDriftAuditor {
                 // fixupTableName's own "already schema-qualified?" guard is unreliable (it does a
                 // literal backslash-dot string check, not a real prefix test), so it's used here
                 // only for its case-folding half - lookupSchemaName is deliberately always null.
-                // No prefix is needed anyway: this method already scopes its query to one schema
-                // via schemaPattern, so its result map is never merged with another schema's, and
-                // a bare (case-folded) table name is unambiguous within it.
+                // A prefix is unnecessary when schemaPattern actually scopes this query to one
+                // schema: the result map then can't merge another schema's tables in, so a bare
+                // (case-folded) table name is unambiguous within it. But schemaPattern can be null
+                // here - via findDrift's no-schema overload, SchemaFingerprint.compute's unscoped
+                // 2-arg overload, or always on MySQL, where schema resolution never yields a
+                // non-null value (see enrichWithMySqlCharsetAndCollation's javadoc) - and then this
+                // map genuinely can merge same-named tables/columns from different schemas or
+                // databases under one bare table name. That's exactly the ambiguity
+                // hasDuplicateColumnNames, findDrift's fallback comparison, and
+                // enrichWithMySqlCharsetAndCollation's skip-and-warn logic all exist to handle.
                 String normalizedTableName = DatabaseUtil.ColumnCheckInfo.fixupTableName(
                         rs.getString("TABLE_NAME"), null, needsUpperCase);
                 // NULLABLE is documented by DatabaseMetaData.getColumns as one of columnNoNulls,

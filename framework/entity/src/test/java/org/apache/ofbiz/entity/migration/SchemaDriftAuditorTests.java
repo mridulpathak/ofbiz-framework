@@ -184,10 +184,19 @@ public class SchemaDriftAuditorTests {
             SchemaDriftAuditor auditor = new SchemaDriftAuditor(live, reference);
             List<SchemaDriftAuditor.DriftFinding> findings = auditor.findDrift(List.of("WIDGET"));
 
-            assertFalse(findings.isEmpty(),
+            assertEquals(1, findings.size(),
                     "a genuine difference (the VARCHAR(50) WIDGET_NAME not present in reference) must never be "
                             + "silently swallowed just because the live side has an ambiguous, duplicate-named "
                             + "column: " + findings);
+            assertEquals("WIDGET", findings.get(0).tableName());
+            String description = findings.get(0).description();
+            assertTrue(description.contains("WIDGET_NAME"),
+                    "finding should mention the ambiguous column: " + description);
+            assertTrue(description.contains("50"),
+                    "finding should mention the live-only VARCHAR(50) signature that has no match in reference "
+                            + "(the fallback set-difference comparison never resurfaces the VARCHAR(100) signature "
+                            + "both sides share, only the one live-only entry that makes this table's drift real): "
+                            + description);
         }
     }
 
