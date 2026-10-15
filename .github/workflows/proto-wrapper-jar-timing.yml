@@ -1,0 +1,48 @@
+# PROTOTYPE, fork-only measurement workflow. Not for upstream.
+# Times two ways of obtaining the Gradle wrapper jar for a given Gradle version on a GitHub-hosted runner:
+#   A: download the full gradle-<v>-bin.zip, verify, extract the nested gradle-wrapper.jar
+#   B: range-request extraction of the same jar (Java single-file program)
+name: Prototype wrapper jar timing
+
+on:
+  push:
+    branches: [ wrapper-jar-source-prototype ]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: Check out OFBiz sources
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Runner info
+      run: |
+        uname -a
+        java -version 2>&1 | head -1
+        unzip -v | head -1
+
+    - name: Approach A, full distribution download (3 runs)
+      run: |
+        for i in 1 2 3; do
+          start=$(date +%s.%N)
+          sh gradle/proto-wrapper-a.sh 8.14.6 "$RUNNER_TEMP/a$i"
+          end=$(date +%s.%N)
+          kb=$(du -sk "$RUNNER_TEMP/a$i" | cut -f1)
+          echo "RESULT A run $i: $(awk "BEGIN{printf \"%.2f\", $end - $start}") s, $kb KB on disk" | tee -a "$GITHUB_STEP_SUMMARY"
+        done
+
+    - name: Approach B, range requests (3 runs)
+      run: |
+        for i in 1 2 3; do
+          start=$(date +%s.%N)
+          sh gradle/proto-wrapper-b.sh 8.14.6 "$RUNNER_TEMP/b$i"
+          end=$(date +%s.%N)
+          kb=$(du -sk "$RUNNER_TEMP/b$i" | cut -f1)
+          echo "RESULT B run $i: $(awk "BEGIN{printf \"%.2f\", $end - $start}") s, $kb KB on disk" | tee -a "$GITHUB_STEP_SUMMARY"
+        done
