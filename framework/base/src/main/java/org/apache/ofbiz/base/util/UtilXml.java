@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URL;
@@ -1166,9 +1167,24 @@ public final class UtilXml {
                 }
                 Debug.logWarning("[UtilXml.LocalResolver.resolveEntity] could not find LOCAL DTD/Schema with publicId ["
                         + publicId + "] and the file/resource is [" + filename + "]", MODULE);
-                return null;
+                // Return an empty DTD source rather than null: a null return lets the parser resolve the
+                // systemId itself, which for a remote systemId means an outbound network request during
+                // validation. Local DTD resolution above (localdtds.properties / classpath) is unaffected.
+                return emptyDtdSource();
             }
-            return defaultResolver.resolveEntity(publicId, systemId);
+            InputSource resolved = defaultResolver.resolveEntity(publicId, systemId);
+            // The default resolver returns null for an unresolved DTD, which would let the parser fetch
+            // the systemId; substitute an empty DTD source so no external systemId is resolved.
+            return resolved != null ? resolved : emptyDtdSource();
+        }
+
+        /**
+         * Builds an empty DTD input source for a declared DTD that could not be resolved locally, so the
+         * parser uses this empty source instead of resolving the (possibly remote) systemId over the network.
+         * @return an InputSource backed by an empty reader
+         */
+        private static InputSource emptyDtdSource() {
+            return new InputSource(new StringReader(""));
         }
 
         /**
