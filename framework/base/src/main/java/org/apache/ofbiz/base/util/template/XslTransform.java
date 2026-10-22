@@ -57,11 +57,14 @@ public final class XslTransform {
             Debug.logWarning("TransformerFactory does not support ACCESS_EXTERNAL_* attributes: " + e.getMessage(), MODULE);
         }
         if (tfactory.getFeature(SAXSource.FEATURE)) {
-            // setup for xml data file preprocessing to be able to xinclude
+            // set up a hardened, non-validating SAX parser for the xml data file
             SAXParserFactory pfactory = SAXParserFactory.newInstance();
             pfactory.setNamespaceAware(true);
             pfactory.setValidating(false);
-            pfactory.setXIncludeAware(true);
+            // XInclude is left disabled: it is not covered by the external-entity hardening below and
+            // would let the data document pull in arbitrary local files (file:// disclosure) or remote
+            // URLs (SSRF), bypassing the file allow-list that only gates the rendered file itself.
+            pfactory.setXIncludeAware(false);
             XMLReader reader = null;
             try {
                 pfactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);

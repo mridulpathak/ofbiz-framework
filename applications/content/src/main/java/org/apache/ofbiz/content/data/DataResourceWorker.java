@@ -940,14 +940,20 @@ public class DataResourceWorker implements org.apache.ofbiz.widget.content.DataR
                     throw new GeneralException("Error rendering FTL template", e);
                 }
             } else if ("XSLT".equals(dataTemplateTypeId)) {
-                File targetFileLocation = new File(System.getProperty("ofbiz.home") + "/runtime/tempfiles/docbook.css");
                 String defaultVisualThemeId = EntityUtilProperties.getPropertyValue("general", "VISUAL_THEME", delegator);
                 visualTheme = ThemeFactory.getVisualThemeFromId(defaultVisualThemeId);
                 modelTheme = visualTheme.getModelTheme();
                 String docbookStylesheet = modelTheme.getProperty("VT_DOCBOOKSTYLESHEET").toString();
-                File sourceFileLocation = new File(System.getProperty("ofbiz.home") + "/themes" + docbookStylesheet.substring(1,
-                        docbookStylesheet.length() - 1));
-                UtilMisc.copyFile(sourceFileLocation, targetFileLocation);
+                // Stage the DocBook CSS only when the active visual theme actually defines one.
+                // getProperty() returns an empty string when the property is absent (no shipped theme
+                // sets it), and the substring() below would then throw StringIndexOutOfBoundsException,
+                // aborting the whole XSLT rendering before it starts.
+                if (UtilValidate.isNotEmpty(docbookStylesheet)) {
+                    File targetFileLocation = new File(System.getProperty("ofbiz.home") + "/runtime/tempfiles/docbook.css");
+                    File sourceFileLocation = new File(System.getProperty("ofbiz.home") + "/themes" + docbookStylesheet.substring(1,
+                            docbookStylesheet.length() - 1));
+                    UtilMisc.copyFile(sourceFileLocation, targetFileLocation);
+                }
                 // get the template data for rendering
                 String templateLocation = DataResourceWorker.getContentFile(dataResource.getString("dataResourceTypeId"),
                         dataResource.getString("objectInfo"), (String) templateContext.get("contextRoot")).toString();
