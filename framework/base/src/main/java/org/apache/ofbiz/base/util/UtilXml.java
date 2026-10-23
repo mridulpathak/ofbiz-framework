@@ -611,6 +611,11 @@ public final class UtilXml {
         parser.setFeature("http://xml.org/sax/features/external-general-entities", false);
         parser.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
         parser.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        // Bound entity expansion on this parser. The standard readXmlDocument() path gets this limit from
+        // FEATURE_SECURE_PROCESSING on its DocumentBuilderFactory, but that feature is not recognised by the
+        // raw Xerces DOMParser used here, so apply the Xerces security manager instead. Its default
+        // entity-expansion limit (100000) matches the limit already enforced on the standard path.
+        parser.setProperty("http://apache.org/xml/properties/security-manager", new org.apache.xerces.util.SecurityManager());
 
         // with a SchemaUrl, a URL object
         if (validate) {
